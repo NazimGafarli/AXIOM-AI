@@ -2,7 +2,13 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, ArrowRight, CheckCircle2, XCircle, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { ai, MODEL_NAMES, parseJSONResponse, isQuotaError } from '../lib/gemini';
+import { parseJSONResponse, isQuotaError } from '../lib/gemini';
+import Groq from 'groq-sdk';
+
+const groq = new Groq({
+  apiKey: import.meta.env.VITE_GROQ_API_KEY,
+  dangerouslyAllowBrowser: true,
+});
 
 interface Question {
   id: number;
@@ -34,7 +40,7 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
     const generateQuiz = async () => {
       try {
         const prompt = `Generate a 3-question math quiz on the topic of "${topic}" with "Medium" difficulty.
-        Respond ONLY with valid JSON in this exact format:
+        Respond ONLY with valid JSON in this exact format, no extra text:
         {
           "topic": "${topic}",
           "questions": [
@@ -48,40 +54,34 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
           ]
         }`;
 
-        const generate = async (modelName: string) => {
-          return await ai.models.generateContent({
-            model: modelName,
-            contents: { parts: [{ text: prompt }] },
-            config: {
-              responseMimeType: "application/json"
-            }
-          });
-        };
+        const response = await groq.chat.completions.create({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a math quiz generator. Always respond with valid JSON only, no markdown, no extra text.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+        });
 
-        let response;
-        try {
-          response = await generate(MODEL_NAMES.FLASH);
-        } catch (err) {
-          if (isQuotaError(err)) {
-            response = await generate(MODEL_NAMES.LITE);
-          } else {
-            throw err;
-          }
-        }
+        const text = response.choices[0]?.message?.content;
+        if (!text) throw new Error('Failed to generate quiz');
 
-        if (!response.text) throw new Error('Failed to generate quiz');
-        
-        const data = parseJSONResponse(response.text);
+        const data = parseJSONResponse(text);
         setQuiz(data);
       } catch (err) {
-      console.error("Quiz Generation Error:", err);
-      if (isQuotaError(err)) {
-        toast.error('The quiz engine is currently busy or out of credits. Try again later.');
-      } else {
-        toast.error('Could not generate quiz. Try again later.');
-      }
-      onClose();
-    } finally {
+        console.error('Quiz Generation Error:', err);
+        if (isQuotaError(err)) {
+          toast.error('The quiz engine is currently busy. Try again later.');
+        } else {
+          toast.error('Could not generate quiz. Try again later.');
+        }
+        onClose();
+      } finally {
         setLoading(false);
       }
     };
@@ -113,7 +113,7 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
         className="w-full max-w-2xl bento-card relative overflow-hidden"
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-secondary">
-          <motion.div 
+          <motion.div
             className="h-full bg-accent-primary"
             initial={{ width: 0 }}
             animate={{ width: quiz ? `${((currentIdx + (selectedIdx !== null ? 1 : 0)) / quiz.questions.length) * 100}%` : 0 }}
@@ -132,7 +132,7 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
             </div>
             <h2 className="text-3xl font-bold mb-2">Quiz Complete!</h2>
             <p className="text-text-secondary mb-8">You scored {score} out of {quiz?.questions.length}</p>
-            
+
             <div className="grid grid-cols-2 gap-4 mb-8">
               <div className="p-4 rounded-2xl bg-secondary border border-border">
                 <span className="block text-xs text-text-muted font-bold uppercase mb-1">Accuracy</span>
@@ -175,11 +175,11 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
                     onClick={() => handleSelect(i)}
                     disabled={showResult}
                     className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${
-                      !showResult 
+                      !showResult
                         ? 'bg-secondary border-border hover:border-accent-primary hover:bg-elevated'
-                        : isCorrect 
+                        : isCorrect
                           ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
-                          : isSelected 
+                          : isSelected
                             ? 'bg-red-500/10 border-red-500 text-red-500'
                             : 'bg-secondary border-border opacity-50'
                     }`}

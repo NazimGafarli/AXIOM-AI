@@ -1,9 +1,15 @@
 import { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { Microscope, FileText, Fingerprint, FlaskConical as Flask, Send, Loader2, Sparkles, Binary, Beaker } from 'lucide-react';
-import { ai, MODEL_NAMES, isQuotaError } from '../lib/gemini';
+import { isQuotaError } from '../lib/gemini';
 import { BlockMath } from 'react-katex';
 import { toast } from 'sonner';
+import Groq from 'groq-sdk';
+
+const groq = new Groq({
+  apiKey: import.meta.env.VITE_GROQ_API_KEY,
+  dangerouslyAllowBrowser: true,
+});
 
 export default function ResearchLab() {
   const [activeTab, setActiveTab] = useState<'analyzer' | 'fingerprint' | 'lab'>('analyzer');
@@ -17,51 +23,41 @@ export default function ResearchLab() {
     setResult(null);
     try {
       const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve) => {
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.readAsDataURL(file);
+      const textPromise = new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsText(file);
       });
-      const base64 = await base64Promise;
+      const fileText = await textPromise;
 
-      const prompt = `Analyze this mathematical research document. 
+      const prompt = `Analyze this mathematical research document content.
       Identify:
       1. Core Theorem/Hypothesis
       2. Methodology used
       3. Key mathematical breakthroughs
       4. Theoretical dependencies (what other theories it builds on)
-      Provide a concise, high-level summary for a fast-reading researcher. 
-      Respond in Markdown.`;
+      Provide a concise, high-level summary for a fast-reading researcher.
+      Respond in Markdown.
+      
+      Document content:
+      ${fileText.slice(0, 8000)}`;
 
-      const generate = async (modelName: string) => {
-        return await ai.models.generateContent({
-          model: modelName,
-          contents: { parts: [
-            { text: prompt },
-            { inlineData: { mimeType: file.type, data: base64 } }
-          ] },
-        });
-      };
+      const response = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: 'You are an expert mathematical research analyst.' },
+          { role: 'user', content: prompt },
+        ],
+      });
 
-      let response;
-      try {
-        response = await generate(MODEL_NAMES.PRO);
-      } catch (err: any) {
-        if (isQuotaError(err)) {
-          console.warn("Pro quota hit, falling back to Flash...");
-          response = await generate(MODEL_NAMES.FLASH);
-        } else {
-          throw err;
-        }
-      }
-
-      if (!response.text) throw new Error("Empty response from AI");
-      setResult(response.text);
+      const text = response.choices[0]?.message?.content;
+      if (!text) throw new Error("Empty response from AI");
+      setResult(text);
     } catch (err: any) {
       console.error("Research Lab Error:", err);
       if (isQuotaError(err)) {
         toast.error("The research engine is currently at capacity. Please try again later.");
       } else {
-        toast.error("Analysis failed. Ensure file is a valid PDF or Image.");
+        toast.error("Analysis failed. Ensure file is a valid text-based document.");
       }
     } finally {
       setLoading(false);
@@ -81,25 +77,17 @@ export default function ResearchLab() {
       - Symmetries and Invariants.
       Respond in a structured research summary format. Use LaTeX for formulas.`;
 
-      const generate = async (modelName: string) => {
-        return await ai.models.generateContent({
-          model: modelName,
-          contents: { parts: [{ text: prompt }] }
-        });
-      };
+      const response = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: 'You are an expert mathematician specializing in structural analysis.' },
+          { role: 'user', content: prompt },
+        ],
+      });
 
-      let response;
-      try {
-        response = await generate(MODEL_NAMES.PRO);
-      } catch (err: any) {
-        if (isQuotaError(err)) {
-          response = await generate(MODEL_NAMES.FLASH);
-        } else {
-          throw err;
-        }
-      }
-      if (!response.text) throw new Error("Empty response from AI");
-      setResult(response.text);
+      const text = response.choices[0]?.message?.content;
+      if (!text) throw new Error("Empty response from AI");
+      setResult(text);
     } catch (err: any) {
       console.error("Fingerprint Error:", err);
       if (isQuotaError(err)) {
@@ -150,49 +138,50 @@ export default function ResearchLab() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1 space-y-6">
-             {activeTab === 'analyzer' && (
-               <div className="bento-card border-accent-primary/20 bg-accent-primary/5">
-                 <h3 className="text-sm font-bold mb-4">Upload Research Paper</h3>
-                 <p className="text-xs text-text-secondary mb-6 leading-relaxed">
-                   Upload a PDF or Image of a mathematical publication. Axiom will identify proofs, methodologies, and core logic.
-                 </p>
-                 <button 
-                   onClick={() => fileInputRef.current?.click()}
-                   className="w-full py-12 border-2 border-dashed border-border rounded-2xl hover:border-accent-primary transition-all flex flex-col items-center gap-3 group"
-                 >
-                   <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-text-muted group-hover:bg-accent-primary group-hover:text-white transition-all">
+            {activeTab === 'analyzer' && (
+              <div className="bento-card border-accent-primary/20 bg-accent-primary/5">
+                <h3 className="text-sm font-bold mb-4">Upload Research Paper</h3>
+                <p className="text-xs text-text-secondary mb-6 leading-relaxed">
+                  Upload a text-based document of a mathematical publication. Axiom will identify proofs, methodologies, and core logic.
+                </p>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full py-12 border-2 border-dashed border-border rounded-2xl hover:border-accent-primary transition-all flex flex-col items-center gap-3 group"
+                >
+                  <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-text-muted group-hover:bg-accent-primary group-hover:text-white transition-all">
                     <Send size={24} className="-rotate-45" />
-                   </div>
-                   <span className="text-xs font-bold text-text-muted">Drop PDF here or click to browse</span>
-                 </button>
-                 <input 
-                   type="file" 
-                   ref={fileInputRef} 
-                   className="hidden" 
-                   onChange={(e) => e.target.files?.[0] && analyzePaper(e.target.files[0])}
-                 />
-               </div>
-             )}
+                  </div>
+                  <span className="text-xs font-bold text-text-muted">Drop file here or click to browse</span>
+                </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept=".txt,.md,.tex"
+                  onChange={(e) => e.target.files?.[0] && analyzePaper(e.target.files[0])}
+                />
+              </div>
+            )}
 
-             {activeTab === 'fingerprint' && (
-               <div className="bento-card">
-                 <h3 className="text-sm font-bold mb-4">Input Expression</h3>
-                 <textarea 
-                   value={input}
-                   onChange={e => setInput(e.target.value)}
-                   placeholder="Enter a formula (e.g. e^{i\pi} + 1 = 0)"
-                   className="w-full h-32 bg-secondary border border-border rounded-xl p-4 text-sm font-mono focus:border-accent-primary outline-none transition-all resize-none mb-4"
-                 />
-                 <button 
-                   onClick={getFingerprint}
-                   disabled={loading || !input.trim()}
-                   className="w-full py-4 rounded-xl bg-accent-primary text-white font-bold text-sm shadow-glow hover:opacity-90 transition-all flex items-center justify-center gap-2"
-                 >
-                   {loading ? <Loader2 size={20} className="animate-spin" /> : <Fingerprint size={20} />}
-                   <span>Generate Structural Fingerprint</span>
-                 </button>
-               </div>
-             )}
+            {activeTab === 'fingerprint' && (
+              <div className="bento-card">
+                <h3 className="text-sm font-bold mb-4">Input Expression</h3>
+                <textarea
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  placeholder="Enter a formula (e.g. e^{i\pi} + 1 = 0)"
+                  className="w-full h-32 bg-secondary border border-border rounded-xl p-4 text-sm font-mono focus:border-accent-primary outline-none transition-all resize-none mb-4"
+                />
+                <button
+                  onClick={getFingerprint}
+                  disabled={loading || !input.trim()}
+                  className="w-full py-4 rounded-xl bg-accent-primary text-white font-bold text-sm shadow-glow hover:opacity-90 transition-all flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 size={20} className="animate-spin" /> : <Fingerprint size={20} />}
+                  <span>Generate Structural Fingerprint</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="lg:col-span-2">
@@ -217,7 +206,7 @@ export default function ResearchLab() {
                   <p className="text-xs text-text-muted animate-pulse">Running field-specific analysis & symmetry checks</p>
                 </div>
               ) : result ? (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="prose prose-invert prose-sm max-w-none text-text-secondary leading-relaxed"

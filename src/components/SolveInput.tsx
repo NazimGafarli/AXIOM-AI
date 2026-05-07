@@ -2,11 +2,12 @@ import { useState, useRef } from 'react';
 import { Send, Keyboard, Loader2, Camera, Upload } from 'lucide-react';
 
 interface SolveInputProps {
+  id?: string;
   onSolve: (problem: string, image?: File) => void;
   isLoading: boolean;
 }
 
-export default function SolveInput({ onSolve, isLoading }: SolveInputProps) {
+export default function SolveInput({ id, onSolve, isLoading }: SolveInputProps) {
   const [input, setInput] = useState('');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,7 +27,7 @@ export default function SolveInput({ onSolve, isLoading }: SolveInputProps) {
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div id={id} className="w-full max-w-2xl mx-auto">
       <form onSubmit={handleSubmit} className="relative group">
         <div className="relative">
           <textarea

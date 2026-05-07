@@ -5,9 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import { GoogleGenAI } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import { ai, MODEL_NAMES, isQuotaError } from '../lib/gemini';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -51,26 +49,49 @@ export default function ProfessorChat({ solveContext, onClose }: ProfessorChatPr
       2. Be encouraging but rigorous.
       3. Use the Socratic method: guide the student rather than just giving the answer if they ask for one.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          ...messages.map(m => ({
-            role: m.role === "user" ? "user" : "model",
-            parts: [{ text: m.content }]
-          })),
-          { role: "user", parts: [{ text: userMessage.content }] }
-        ],
-        config: {
-          systemInstruction
+      const contents = [
+        ...messages.map(m => ({
+          role: m.role === "user" ? "user" : "model" as const,
+          parts: [{ text: m.content }]
+        })),
+        { role: "user" as const, parts: [{ text: userMessage.content }] }
+      ];
+
+      const generate = async (modelName: string) => {
+        return await ai.models.generateContent({
+          model: modelName,
+          contents: [
+            ...messages.map(m => ({
+              role: m.role === "user" ? "user" : "model",
+              parts: [{ text: m.content }]
+            })),
+            { role: "user", parts: [{ text: userMessage.content }] }
+          ],
+          config: { systemInstruction }
+        });
+      };
+
+      let response;
+      try {
+        response = await generate(MODEL_NAMES.FLASH);
+      } catch (err) {
+        if (isQuotaError(err)) {
+          response = await generate(MODEL_NAMES.LITE);
+        } else {
+          throw err;
         }
-      });
+      }
 
       if (!response.text) throw new Error('Failed to chat');
 
       setMessages(prev => [...prev, { role: 'assistant', content: response.text! }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setMessages(prev => [...prev, { role: 'assistant', content: "I'm sorry, I encountered an issue. Let me try that again." }]);
+      const isQuota = isQuotaError(error);
+      const fallbackMsg = isQuota 
+        ? "I'm a bit overwhelmed with students right now. Please try again in a moment!"
+        : "I'm sorry, I encountered an issue. Let me try that again.";
+      setMessages(prev => [...prev, { role: 'assistant', content: fallbackMsg }]);
     } finally {
       setIsLoading(false);
     }

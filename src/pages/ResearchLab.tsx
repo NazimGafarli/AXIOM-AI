@@ -1,11 +1,9 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Microscope, FileText, Fingerprint, FlaskConical as Flask, Send, Loader2, Sparkles, Binary, Beaker } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { ai, MODEL_NAMES, isQuotaError } from '../lib/gemini';
 import { BlockMath } from 'react-katex';
 import { toast } from 'sonner';
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export default function ResearchLab() {
   const [activeTab, setActiveTab] = useState<'analyzer' | 'fingerprint' | 'lab'>('analyzer');
@@ -34,20 +32,37 @@ export default function ResearchLab() {
       Provide a concise, high-level summary for a fast-reading researcher. 
       Respond in Markdown.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: [{
-          role: "user",
-          parts: [
+      const generate = async (modelName: string) => {
+        return await ai.models.generateContent({
+          model: modelName,
+          contents: { parts: [
             { text: prompt },
             { inlineData: { mimeType: file.type, data: base64 } }
-          ]
-        }]
-      });
+          ] },
+        });
+      };
 
+      let response;
+      try {
+        response = await generate(MODEL_NAMES.PRO);
+      } catch (err: any) {
+        if (isQuotaError(err)) {
+          console.warn("Pro quota hit, falling back to Flash...");
+          response = await generate(MODEL_NAMES.FLASH);
+        } else {
+          throw err;
+        }
+      }
+
+      if (!response.text) throw new Error("Empty response from AI");
       setResult(response.text);
-    } catch (err) {
-      toast.error("Analysis failed. Ensure file is a valid PDF or Image.");
+    } catch (err: any) {
+      console.error("Research Lab Error:", err);
+      if (isQuotaError(err)) {
+        toast.error("The research engine is currently at capacity. Please try again later.");
+      } else {
+        toast.error("Analysis failed. Ensure file is a valid PDF or Image.");
+      }
     } finally {
       setLoading(false);
     }
@@ -66,13 +81,32 @@ export default function ResearchLab() {
       - Symmetries and Invariants.
       Respond in a structured research summary format. Use LaTeX for formulas.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: [{ role: "user", parts: [{ text: prompt }] }]
-      });
+      const generate = async (modelName: string) => {
+        return await ai.models.generateContent({
+          model: modelName,
+          contents: { parts: [{ text: prompt }] }
+        });
+      };
+
+      let response;
+      try {
+        response = await generate(MODEL_NAMES.PRO);
+      } catch (err: any) {
+        if (isQuotaError(err)) {
+          response = await generate(MODEL_NAMES.FLASH);
+        } else {
+          throw err;
+        }
+      }
+      if (!response.text) throw new Error("Empty response from AI");
       setResult(response.text);
-    } catch (err) {
-      toast.error("Fingerprinting failed.");
+    } catch (err: any) {
+      console.error("Fingerprint Error:", err);
+      if (isQuotaError(err)) {
+        toast.error("Fingerprint engine busy. Try again later.");
+      } else {
+        toast.error("Fingerprinting failed.");
+      }
     } finally {
       setLoading(false);
     }

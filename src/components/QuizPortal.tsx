@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, ArrowRight, CheckCircle2, XCircle, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { GoogleGenAI } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import { ai, MODEL_NAMES, parseJSONResponse, isQuotaError } from '../lib/gemini';
 
 interface Question {
   id: number;
@@ -50,23 +48,40 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
           ]
         }`;
 
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          config: {
-            responseMimeType: "application/json"
+        const generate = async (modelName: string) => {
+          return await ai.models.generateContent({
+            model: modelName,
+            contents: { parts: [{ text: prompt }] },
+            config: {
+              responseMimeType: "application/json"
+            }
+          });
+        };
+
+        let response;
+        try {
+          response = await generate(MODEL_NAMES.FLASH);
+        } catch (err) {
+          if (isQuotaError(err)) {
+            response = await generate(MODEL_NAMES.LITE);
+          } else {
+            throw err;
           }
-        });
+        }
 
         if (!response.text) throw new Error('Failed to generate quiz');
         
-        const data = JSON.parse(response.text.trim());
+        const data = parseJSONResponse(response.text);
         setQuiz(data);
       } catch (err) {
-        console.error(err);
+      console.error("Quiz Generation Error:", err);
+      if (isQuotaError(err)) {
+        toast.error('The quiz engine is currently busy or out of credits. Try again later.');
+      } else {
         toast.error('Could not generate quiz. Try again later.');
-        onClose();
-      } finally {
+      }
+      onClose();
+    } finally {
         setLoading(false);
       }
     };

@@ -9,13 +9,10 @@ import StepDisplay from '../components/StepDisplay';
 import ProfessorChat from '../components/ProfessorChat';
 import QuizPortal from '../components/QuizPortal';
 import { BlockMath } from 'react-katex';
-import { SolveResult } from '../types';
+import { SolveResult, Difficulty } from '../types';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
-import { GoogleGenAI } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
+import { ai, MODEL_NAMES, parseJSONResponse, Type, isQuotaError } from '../lib/gemini';
 import { useNavigate } from 'react-router-dom';
 
 export default function Solve() {
@@ -27,6 +24,11 @@ export default function Solve() {
   const [showQuiz, setShowQuiz] = useState(false);
 
   const handleSolve = async (problem: string, image?: File) => {
+    if (!process.env.GEMINI_API_KEY) {
+      toast.error("Gemini API key is not configured. Please add it in Settings.");
+      return;
+    }
+    
     setIsLoading(true);
     setResult(null);
     setShowChat(false);
@@ -38,35 +40,20 @@ export default function Solve() {
       const solveCount = localStorage.getItem('axiom_solves_count') || '0';
       const count = parseInt(solveCount);
       
-      if (count >= 5 && !user) {
+      if (count >= 15 && !user) {
         toast.error("Free limit reached! Upgrade to Axiom Plus to continue.");
         navigate('/pricing');
         return;
       }
 
       let prompt = `You are AxiomAI, an elite mathematical problem-solving AI. Solve this problem with 100% accuracy.
-      Respond ONLY with valid JSON in this exact format:
-      {
-        "topic": "string",
-        "subtopic": "string",
-        "difficulty": "elementary|middle|high_school|undergraduate|graduate|research",
-        "final_answer": "string",
-        "final_answer_latex": "string",
-        "problem_summary": "string",
-        "steps": [
-          {
-            "step_number": number,
-            "title": "string",
-            "latex": "string",
-            "plain_english": "string"
-          }
-        ],
-        "has_graph": boolean,
-        "graph_function": "string or null"
-      }
+      Your output must be a single, valid JSON object conforming strictly to the provided schema. 
+      Do NOT include any markdown code blocks (like \`\`\`json) or extra text outside the JSON object.
+      Use professional LaTeX for all mathematical notation. Ensure all LaTeX backslashes are properly escaped (e.g., \\\\frac instead of \\frac).
       Problem: ${problem || 'Solve the math in the attached image'}`;
 
-      const contents: any[] = [{ role: "user", parts: [{ text: prompt }] }];
+      let base64 = "";
+      let mimeType = "";
 
       if (image) {
         const reader = new FileReader();
@@ -74,26 +61,90 @@ export default function Solve() {
           reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
           reader.readAsDataURL(image);
         });
-        const base64 = await base64Promise;
-        contents[0].parts.push({
-          inlineData: {
-            mimeType: image.type,
-            data: base64
-          }
-        });
+        base64 = await base64Promise;
+        mimeType = image.type;
       }
 
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash", // Using flash for vision support & speed
-        contents,
-        config: {
-          responseMimeType: "application/json",
+      const generateResult = async (modelName: string) => {
+        console.log("Attempting solve with model:", modelName);
+        
+        const imagePart = base64 ? {
+          inlineData: {
+            mimeType,
+            data: base64
+          }
+        } : null;
+
+        const contents = imagePart 
+          ? { parts: [{ text: prompt }, imagePart] }
+          : { parts: [{ text: prompt }] };
+
+        return await ai.models.generateContent({
+          model: modelName,
+          contents,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                topic: { type: Type.STRING },
+                subtopic: { type: Type.STRING },
+                difficulty: { 
+                  type: Type.STRING,
+                  enum: Object.values(Difficulty)
+                },
+                final_answer: { type: Type.STRING },
+                final_answer_latex: { type: Type.STRING },
+                problem_summary: { type: Type.STRING },
+                steps: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      step_number: { type: Type.NUMBER },
+                      title: { type: Type.STRING },
+                      latex: { type: Type.STRING },
+                      plain_english: { type: Type.STRING }
+                    },
+                    required: ["step_number", "title", "latex", "plain_english"]
+                  }
+                },
+                has_graph: { type: Type.BOOLEAN },
+                graph_function: { type: Type.STRING }
+              },
+              required: ["topic", "subtopic", "difficulty", "final_answer", "final_answer_latex", "problem_summary", "steps", "has_graph"]
+            }
+          }
+        });
+      };
+
+      let response;
+      try {
+        response = await generateResult(MODEL_NAMES.PRO);
+      } catch (err) {
+        if (isQuotaError(err)) {
+          console.warn("PRO model quota hit, falling back to Flash model...");
+          toast.info("Model busy, switching to fallback mode...");
+          response = await generateResult(MODEL_NAMES.FLASH);
+        } else {
+          throw err;
         }
-      });
+      }
 
-      if (!response.text) throw new Error('Failed to solve');
+      if (!response.text) {
+        throw new Error('The AI model returned an empty response. This can happen if the problem is too complex or violates safety guidelines.');
+      }
 
-      const data: SolveResult = JSON.parse(response.text.trim());
+      console.log("AI result received, parsing...");
+      let data: SolveResult;
+      try {
+        data = parseJSONResponse(response.text);
+      } catch (e) {
+        console.error("Parse Error Details:", e);
+        console.log("Raw Response:", response.text);
+        throw e;
+      }
+      
       setResult(data);
 
       // Store count for limits
@@ -107,21 +158,41 @@ export default function Solve() {
         colors: ['#06B6D4', '#818CF8', '#ffffff']
       });
 
-      // Save to Firebase if user is logged in
+      // Save to Firebase in background
       if (user) {
-        await addDoc(collection(db, 'solves'), {
+        addDoc(collection(db, 'solves'), {
           ...data,
           userId: user.uid,
           createdAt: serverTimestamp(),
           isPublic: false,
           isStarred: false,
+        }).catch(err => {
+          console.error("Failed to save solve to history:", err);
+          // Don't toast error here to not confuse the user if the result is already there
         });
       }
 
       toast.success('Problem solved successfully!');
-    } catch (error) {
-      console.error(error);
-      toast.error('An error occurred while solving the problem.');
+    } catch (error: any) {
+      console.error("Math Solve Error:", error);
+      let errorMessage = 'An error occurred while solving the problem.';
+      
+      const details = error.status ? `(Status: ${error.status})` : '';
+      
+      if (isQuotaError(error)) {
+        errorMessage = `The AI service is currently at capacity or out of credits ${details}. Please check your Gemini API billing status.`;
+      } else if (error.message) {
+        // If it's a specific API error, show part of it
+        if (error.message.includes('API_KEY_INVALID')) {
+          errorMessage = 'The Gemini API key is invalid or not set correctly.';
+        } else if (error.message.includes('not found')) {
+          errorMessage = 'The requested AI model was not found in this region.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -148,9 +219,9 @@ export default function Solve() {
               Upload a photo or type your problem. AxiomAI provides step-by-step solutions for any math topic.
             </p>
 
-            <SolveInput onSolve={handleSolve} isLoading={isLoading} />
+            <SolveInput id="solve-input" onSolve={handleSolve} isLoading={isLoading} />
             
-            <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
+            <div id="features-grid" className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
               {[
                 { icon: <Sparkles className="text-accent-primary" />, title: 'Smart Steps', desc: 'Clear, logical breakdowns of every problem.' },
                 { icon: <History className="text-accent-secondary" />, title: 'Auto-History', desc: 'Never lose a solution again with cloud sync.' },
@@ -179,7 +250,7 @@ export default function Solve() {
             <span className="text-xs font-bold uppercase tracking-widest">Solve another</span>
           </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div id="solve-result-container" className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Main Answer Card */}
             <div className="md:col-span-2 bento-card border-accent-primary/20 bg-gradient-to-br from-card to-secondary">
               <div className="flex items-center justify-between mb-8">

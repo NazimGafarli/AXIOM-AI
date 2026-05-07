@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sigma, Sparkles, History, ArrowRight, Share2, Star, Trash2, GraduationCap, Brain } from 'lucide-react';
+import { Sigma, Sparkles, History, ArrowRight, Share2, Star, GraduationCap, Brain } from 'lucide-react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
@@ -12,8 +12,14 @@ import { BlockMath } from 'react-katex';
 import { SolveResult, Difficulty } from '../types';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
-import { ai, MODEL_NAMES, parseJSONResponse, Type, isQuotaError } from '../lib/gemini';
+import { parseJSONResponse, isQuotaError } from '../lib/gemini';
 import { useNavigate } from 'react-router-dom';
+import Groq from 'groq-sdk';
+
+const groq = new Groq({
+  apiKey: import.meta.env.VITE_GROQ_API_KEY,
+  dangerouslyAllowBrowser: true,
+});
 
 export default function Solve() {
   const navigate = useNavigate();
@@ -24,133 +30,82 @@ export default function Solve() {
   const [showQuiz, setShowQuiz] = useState(false);
 
   const handleSolve = async (problem: string, image?: File) => {
-    if (!process.env.GEMINI_API_KEY) {
-      toast.error("Gemini API key is not configured. Please add it in Settings.");
-      return;
-    }
-    
     setIsLoading(true);
     setResult(null);
     setShowChat(false);
     setShowQuiz(false);
 
     try {
-      // Mock Subscription Check
-      // In a real app, you'd check Firestore/Stripe status
       const solveCount = localStorage.getItem('axiom_solves_count') || '0';
       const count = parseInt(solveCount);
-      
+
       if (count >= 15 && !user) {
         toast.error("Free limit reached! Upgrade to Axiom Plus to continue.");
         navigate('/pricing');
         return;
       }
 
-      let prompt = `You are AxiomAI, an elite mathematical problem-solving AI. Solve this problem with 100% accuracy.
-      Your output must be a single, valid JSON object conforming strictly to the provided schema. 
-      Do NOT include any markdown code blocks (like \`\`\`json) or extra text outside the JSON object.
-      Use professional LaTeX for all mathematical notation. Ensure all LaTeX backslashes are properly escaped (e.g., \\\\frac instead of \\frac).
-      Problem: ${problem || 'Solve the math in the attached image'}`;
-
-      let base64 = "";
-      let mimeType = "";
-
+      let imageContext = "";
       if (image) {
-        const reader = new FileReader();
-        const base64Promise = new Promise<string>((resolve) => {
-          reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-          reader.readAsDataURL(image);
-        });
-        base64 = await base64Promise;
-        mimeType = image.type;
+        imageContext = `Note: The user has also attached an image of the problem. Please solve based on the problem text provided.`;
       }
 
-      const generateResult = async (modelName: string) => {
-        console.log("Attempting solve with model:", modelName);
-        
-        const imagePart = base64 ? {
-          inlineData: {
-            mimeType,
-            data: base64
+      const prompt = `You are AxiomAI, an elite mathematical problem-solving AI. Solve this problem with 100% accuracy.
+      Respond ONLY with a valid JSON object. No markdown, no code blocks, no extra text.
+      Use LaTeX for all mathematical notation. Escape backslashes properly (e.g., \\\\frac instead of \\frac).
+      ${imageContext}
+      
+      Problem: ${problem || 'Solve the math problem'}
+      
+      Respond with this exact JSON structure:
+      {
+        "topic": "string",
+        "subtopic": "string",
+        "difficulty": "Easy" | "Medium" | "Hard" | "Expert",
+        "final_answer": "string",
+        "final_answer_latex": "string",
+        "problem_summary": "string",
+        "steps": [
+          {
+            "step_number": 1,
+            "title": "string",
+            "latex": "string",
+            "plain_english": "string"
           }
-        } : null;
+        ],
+        "has_graph": false,
+        "graph_function": ""
+      }`;
 
-        const contents = imagePart 
-          ? { parts: [{ text: prompt }, imagePart] }
-          : { parts: [{ text: prompt }] };
+      const response = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert math solver. Always respond with valid JSON only. No markdown, no code blocks, no extra text before or after the JSON.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+      });
 
-        return await ai.models.generateContent({
-          model: modelName,
-          contents,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                topic: { type: Type.STRING },
-                subtopic: { type: Type.STRING },
-                difficulty: { 
-                  type: Type.STRING,
-                  enum: Object.values(Difficulty)
-                },
-                final_answer: { type: Type.STRING },
-                final_answer_latex: { type: Type.STRING },
-                problem_summary: { type: Type.STRING },
-                steps: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      step_number: { type: Type.NUMBER },
-                      title: { type: Type.STRING },
-                      latex: { type: Type.STRING },
-                      plain_english: { type: Type.STRING }
-                    },
-                    required: ["step_number", "title", "latex", "plain_english"]
-                  }
-                },
-                has_graph: { type: Type.BOOLEAN },
-                graph_function: { type: Type.STRING }
-              },
-              required: ["topic", "subtopic", "difficulty", "final_answer", "final_answer_latex", "problem_summary", "steps", "has_graph"]
-            }
-          }
-        });
-      };
+      const text = response.choices[0]?.message?.content;
+      if (!text) throw new Error('The AI returned an empty response.');
 
-      let response;
-      try {
-        response = await generateResult(MODEL_NAMES.PRO);
-      } catch (err) {
-        if (isQuotaError(err)) {
-          console.warn("PRO model quota hit, falling back to Flash model...");
-          toast.info("Model busy, switching to fallback mode...");
-          response = await generateResult(MODEL_NAMES.FLASH);
-        } else {
-          throw err;
-        }
-      }
-
-      if (!response.text) {
-        throw new Error('The AI model returned an empty response. This can happen if the problem is too complex or violates safety guidelines.');
-      }
-
-      console.log("AI result received, parsing...");
       let data: SolveResult;
       try {
-        data = parseJSONResponse(response.text);
+        data = parseJSONResponse(text);
       } catch (e) {
-        console.error("Parse Error Details:", e);
-        console.log("Raw Response:", response.text);
+        console.error("Parse Error:", e);
+        console.log("Raw Response:", text);
         throw e;
       }
-      
-      setResult(data);
 
-      // Store count for limits
+      setResult(data);
       localStorage.setItem('axiom_solves_count', (count + 1).toString());
 
-      // Celebration!
       confetti({
         particleCount: 150,
         spread: 70,
@@ -158,7 +113,6 @@ export default function Solve() {
         colors: ['#06B6D4', '#818CF8', '#ffffff']
       });
 
-      // Save to Firebase in background
       if (user) {
         addDoc(collection(db, 'solves'), {
           ...data,
@@ -166,32 +120,20 @@ export default function Solve() {
           createdAt: serverTimestamp(),
           isPublic: false,
           isStarred: false,
-        }).catch(err => {
-          console.error("Failed to save solve to history:", err);
-          // Don't toast error here to not confuse the user if the result is already there
-        });
+        }).catch(err => console.error("Failed to save solve:", err));
       }
 
       toast.success('Problem solved successfully!');
     } catch (error: any) {
       console.error("Math Solve Error:", error);
       let errorMessage = 'An error occurred while solving the problem.';
-      
-      const details = error.status ? `(Status: ${error.status})` : '';
-      
+
       if (isQuotaError(error)) {
-        errorMessage = `The AI service is currently at capacity or out of credits ${details}. Please check your Gemini API billing status.`;
+        errorMessage = 'The AI service is currently at capacity. Please try again shortly.';
       } else if (error.message) {
-        // If it's a specific API error, show part of it
-        if (error.message.includes('API_KEY_INVALID')) {
-          errorMessage = 'The Gemini API key is invalid or not set correctly.';
-        } else if (error.message.includes('not found')) {
-          errorMessage = 'The requested AI model was not found in this region.';
-        } else {
-          errorMessage = error.message;
-        }
+        errorMessage = error.message;
       }
-      
+
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -220,7 +162,7 @@ export default function Solve() {
             </p>
 
             <SolveInput id="solve-input" onSolve={handleSolve} isLoading={isLoading} />
-            
+
             <div id="features-grid" className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
               {[
                 { icon: <Sparkles className="text-accent-primary" />, title: 'Smart Steps', desc: 'Clear, logical breakdowns of every problem.' },
@@ -236,57 +178,56 @@ export default function Solve() {
             </div>
           </motion.div>
         ) : (
-        <motion.div
-          key="result"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
-          <button
-            onClick={() => setResult(null)}
-            className="flex items-center gap-2 text-text-muted hover:text-white transition-colors mb-4 group"
+          <motion.div
+            key="result"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6"
           >
-            <div className="rotate-180"><ArrowRight size={18} /></div>
-            <span className="text-xs font-bold uppercase tracking-widest">Solve another</span>
-          </button>
+            <button
+              onClick={() => setResult(null)}
+              className="flex items-center gap-2 text-text-muted hover:text-white transition-colors mb-4 group"
+            >
+              <div className="rotate-180"><ArrowRight size={18} /></div>
+              <span className="text-xs font-bold uppercase tracking-widest">Solve another</span>
+            </button>
 
             <div id="solve-result-container" className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Main Answer Card */}
-            <div className="md:col-span-2 bento-card border-accent-primary/20 bg-gradient-to-br from-card to-secondary">
-              <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 rounded-md bg-accent-primary text-white text-[10px] font-bold uppercase tracking-wider shadow-glow">
-                    {result.topic}
-                  </span>
-                  <span className="px-3 py-1 rounded-md bg-elevated text-text-muted text-[10px] font-bold uppercase tracking-wider">
-                    {result.difficulty}
-                  </span>
+              <div className="md:col-span-2 bento-card border-accent-primary/20 bg-gradient-to-br from-card to-secondary">
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-md bg-accent-primary text-white text-[10px] font-bold uppercase tracking-wider shadow-glow">
+                      {result.topic}
+                    </span>
+                    <span className="px-3 py-1 rounded-md bg-elevated text-text-muted text-[10px] font-bold uppercase tracking-wider">
+                      {result.difficulty}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button className="p-2 rounded-lg hover:bg-elevated text-text-muted transition-all">
+                      <Share2 size={16} />
+                    </button>
+                    <button className="p-2 rounded-lg hover:bg-elevated text-text-muted transition-all">
+                      <Star size={16} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button className="p-2 rounded-lg hover:bg-elevated text-text-muted transition-all">
-                    <Share2 size={16} />
-                  </button>
-                  <button className="p-2 rounded-lg hover:bg-elevated text-text-muted transition-all">
-                    <Star size={16} />
-                  </button>
-                </div>
-              </div>
 
-              <div className="mb-10 text-center">
-                <p className="text-[10px] text-text-muted mb-4 font-bold uppercase tracking-[0.2em]">Final Answer</p>
-                <div className="text-4xl font-bold text-white overflow-x-auto py-4 font-mono">
-                  <BlockMath math={result.final_answer_latex} />
+                <div className="mb-10 text-center">
+                  <p className="text-[10px] text-text-muted mb-4 font-bold uppercase tracking-[0.2em]">Final Answer</p>
+                  <div className="text-4xl font-bold text-white overflow-x-auto py-4 font-mono">
+                    <BlockMath math={result.final_answer_latex} />
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-text-muted border-b border-border pb-4 flex items-center gap-2">
+                    <Sparkles size={14} className="text-accent-primary" />
+                    <span>Analytical Breakdown</span>
+                  </h2>
+                  <StepDisplay steps={result.steps} />
                 </div>
               </div>
-
-              <div className="space-y-6">
-                 <h2 className="text-sm font-bold uppercase tracking-widest text-text-muted border-b border-border pb-4 flex items-center gap-2">
-                  <Sparkles size={14} className="text-accent-primary" />
-                  <span>Analytical Breakdown</span>
-                </h2>
-                <StepDisplay steps={result.steps} />
-              </div>
-            </div>
 
               <div className="space-y-6">
                 <button

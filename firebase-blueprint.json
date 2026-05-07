@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "User Profile",
+      "description": "Public profile information for a user",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email"]
+    },
+    "UserSettings": {
+      "title": "User Settings",
+      "description": "Private settings and preferences for a user",
+      "type": "object",
+      "properties": {
+        "theme": { "type": "string", "enum": ["midnight-axiom", "solar-calculus", "matrix-protocol", "aurora-borealis", "titanium-pro", "ember-forge"] },
+        "explanationLevel": { "type": "string", "enum": ["eli5", "standard", "technical", "professor"] },
+        "notifications": { "type": "object" },
+        "mathNotation": { "type": "string" },
+        "language": { "type": "string" }
+      }
+    },
+    "Solve": {
+      "title": "Solved Problem",
+      "description": "A mathematical problem that has been solved by the AI",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "inputType": { "type": "string" },
+        "originalText": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "topic": { "type": "string" },
+        "subtopic": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "finalAnswer": { "type": "string" },
+        "finalAnswerLatex": { "type": "string" },
+        "steps": { "type": "array" },
+        "formulasUsed": { "type": "array" },
+        "hasGraph": { "type": "boolean" },
+        "graphFunction": { "type": "string" },
+        "solveTimeMs": { "type": "number" },
+        "isPublic": { "type": "boolean" },
+        "isStarred": { "type": "boolean" },
+        "folderId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Quiz": {
+      "title": "Quiz",
+      "description": "A quiz generated for a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "topic": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "questions": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "QuizAttempt": {
+      "title": "Quiz Attempt",
+      "description": "A user's attempt at a quiz",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "quizId": { "type": "string" },
+        "score": { "type": "number" },
+        "answers": { "type": "array" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Note": {
+      "title": "Note",
+      "description": "A user's personal note",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "object" },
+        "folderId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Folder": {
+      "title": "Folder",
+      "description": "A container for solves and notes",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "color": { "type": "string" },
+        "icon": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": "Profile",
+      "description": "Public profile for each user"
+    },
+    "/userSettings/{userId}": {
+      "schema": "UserSettings",
+      "description": "Private settings for each user"
+    },
+    "/solves/{solveId}": {
+      "schema": "Solve",
+      "description": "Solved problems"
+    },
+    "/quizzes/{quizId}": {
+      "schema": "Quiz",
+      "description": "Generated quizzes"
+    },
+    "/quizAttempts/{attemptId}": {
+      "schema": "QuizAttempt",
+      "description": "Quiz attempts"
+    },
+    "/notes/{noteId}": {
+      "schema": "Note",
+      "description": "User notes"
+    },
+    "/folders/{folderId}": {
+      "schema": "Folder",
+      "description": "User folders"
+    }
+  }
+}

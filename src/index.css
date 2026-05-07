@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: var(--bg-primary);
+  --color-secondary: var(--bg-secondary);
+  --color-card: var(--bg-card);
+  --color-elevated: var(--bg-elevated);
+  --color-border: var(--border);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-secondary: var(--accent-secondary);
+  --color-accent-glow: var(--accent-glow);
+}
+
+:root[data-theme='midnight-axiom'] {
+  --bg-primary: #09090b; /* zinc-950 */
+  --bg-secondary: #18181b; /* zinc-900 */
+  --bg-card: #18181b; /* zinc-900 */
+  --bg-elevated: #27272a; /* zinc-800 */
+  --border: #27272a; /* zinc-800 */
+  --text-primary: #f4f4f5; /* zinc-100 */
+  --text-secondary: #a1a1aa; /* zinc-400 */
+  --text-muted: #71717a; /* zinc-500 */
+  --accent-primary: #6366f1; /* indigo-500 */
+  --accent-secondary: #a855f7; /* purple-500 */
+  --accent-glow: rgba(99, 102, 241, 0.2);
+}
+
+:root[data-theme='solar-calculus'] {
+  --bg-primary: #FFFDF5;
+  --bg-secondary: #FFF8E7;
+  --bg-card: #FFFFFF;
+  --bg-elevated: #FEF3C7;
+  --border: #E5D59A;
+  --text-primary: #1C1508;
+  --text-secondary: #5C4B1A;
+  --text-muted: #9A8055;
+  --accent-primary: #D97706;
+  --accent-secondary: #DC2626;
+  --accent-glow: rgba(217, 119, 6, 0.2);
+}
+
+:root[data-theme='matrix-protocol'] {
+  --bg-primary: #000D00;
+  --bg-secondary: #001200;
+  --bg-card: #001A00;
+  --bg-elevated: #002400;
+  --border: #003D00;
+  --text-primary: #00FF41;
+  --text-secondary: #00CC35;
+  --text-muted: #007A20;
+  --accent-primary: #00FF41;
+  --accent-secondary: #39FF14;
+  --accent-glow: rgba(0,255,65,0.25);
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+@layer utilities {
+  .shadow-glow {
+    box-shadow: 0 0 20px var(--accent-glow), 0 0 40px var(--accent-glow);
+  }
+  .bento-card {
+    @apply bg-card border border-border rounded-3xl p-6 transition-all;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}

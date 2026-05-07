@@ -1,0 +1,6 @@
+{
+  "name": "AxiomAI",
+  "description": "Professional AI-powered math solving platform with step-by-step explanations, interactive graphs, and personalized quizzes.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}

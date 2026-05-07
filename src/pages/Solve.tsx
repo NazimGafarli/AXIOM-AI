@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sigma, Sparkles, History, ArrowRight, Share2, Star, GraduationCap, Brain } from 'lucide-react';
+import { Sigma, Sparkles, History, ArrowRight, Share2, Star, GraduationCap, Brain, Download, Square } from 'lucide-react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
@@ -13,13 +13,15 @@ import { SolveResult, Difficulty } from '../types';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 import { parseJSONResponse, isQuotaError } from '../lib/gemini';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import Groq from 'groq-sdk';
 
 const groq = new Groq({
   apiKey: import.meta.env.VITE_GROQ_API_KEY,
   dangerouslyAllowBrowser: true,
 });
+
+const FREE_LIMIT = 5;
 
 export default function Solve() {
   const navigate = useNavigate();
@@ -28,32 +30,32 @@ export default function Solve() {
   const [result, setResult] = useState<SolveResult | null>(null);
   const [showChat, setShowChat] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const abortRef = useRef<boolean>(false);
 
   const handleSolve = async (problem: string, image?: File) => {
+    const solveCount = parseInt(localStorage.getItem('axiom_solves_count') || '0');
+
+    if (solveCount >= FREE_LIMIT && !user) {
+      setShowLimitModal(true);
+      return;
+    }
+
+    if (solveCount >= FREE_LIMIT) {
+      setShowLimitModal(true);
+      return;
+    }
+
     setIsLoading(true);
+    abortRef.current = false;
     setResult(null);
     setShowChat(false);
     setShowQuiz(false);
 
     try {
-      const solveCount = localStorage.getItem('axiom_solves_count') || '0';
-      const count = parseInt(solveCount);
-
-      if (count >= 15 && !user) {
-        toast.error("Free limit reached! Upgrade to Axiom Plus to continue.");
-        navigate('/pricing');
-        return;
-      }
-
-      let imageContext = "";
-      if (image) {
-        imageContext = `Note: The user has also attached an image of the problem. Please solve based on the problem text provided.`;
-      }
-
       const prompt = `You are AxiomAI, an elite mathematical problem-solving AI. Solve this problem with 100% accuracy.
       Respond ONLY with a valid JSON object. No markdown, no code blocks, no extra text.
       Use LaTeX for all mathematical notation. Escape backslashes properly (e.g., \\\\frac instead of \\frac).
-      ${imageContext}
       
       Problem: ${problem || 'Solve the math problem'}
       
@@ -61,7 +63,7 @@ export default function Solve() {
       {
         "topic": "string",
         "subtopic": "string",
-        "difficulty": "Easy" | "Medium" | "Hard" | "Expert",
+        "difficulty": "Elementary" | "Medium" | "Hard" | "Expert",
         "final_answer": "string",
         "final_answer_latex": "string",
         "problem_summary": "string",
@@ -77,34 +79,28 @@ export default function Solve() {
         "graph_function": ""
       }`;
 
+      if (abortRef.current) return;
+
       const response = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         messages: [
-          {
-            role: 'system',
-            content: 'You are an expert math solver. Always respond with valid JSON only. No markdown, no code blocks, no extra text before or after the JSON.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
+          { role: 'system', content: 'You are an expert math solver. Always respond with valid JSON only.' },
+          { role: 'user', content: prompt },
         ],
       });
+
+      if (abortRef.current) {
+        toast.info('Generation stopped.');
+        return;
+      }
 
       const text = response.choices[0]?.message?.content;
       if (!text) throw new Error('The AI returned an empty response.');
 
-      let data: SolveResult;
-      try {
-        data = parseJSONResponse(text);
-      } catch (e) {
-        console.error("Parse Error:", e);
-        console.log("Raw Response:", text);
-        throw e;
-      }
-
+      const data: SolveResult = parseJSONResponse(text);
       setResult(data);
-      localStorage.setItem('axiom_solves_count', (count + 1).toString());
+
+      localStorage.setItem('axiom_solves_count', (solveCount + 1).toString());
 
       confetti({
         particleCount: 150,
@@ -125,23 +121,98 @@ export default function Solve() {
 
       toast.success('Problem solved successfully!');
     } catch (error: any) {
+      if (abortRef.current) return;
       console.error("Math Solve Error:", error);
-      let errorMessage = 'An error occurred while solving the problem.';
-
-      if (isQuotaError(error)) {
-        errorMessage = 'The AI service is currently at capacity. Please try again shortly.';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      toast.error(errorMessage);
+      toast.error(isQuotaError(error) ? 'AI service is at capacity. Try again shortly.' : error.message || 'An error occurred.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleStop = () => {
+    abortRef.current = true;
+    setIsLoading(false);
+    toast.info('Generation stopped.');
+  };
+
+  const handleExportPDF = () => {
+    if (!result) return;
+    const content = `
+AXIOM AI - Math Solution
+========================
+Topic: ${result.topic} | ${result.subtopic}
+Difficulty: ${result.difficulty}
+
+FINAL ANSWER:
+${result.final_answer}
+
+PROBLEM SUMMARY:
+${result.problem_summary}
+
+STEP-BY-STEP SOLUTION:
+${result.steps.map(s => `
+Step ${s.step_number}: ${s.title}
+${s.plain_english}
+Formula: ${s.latex}
+`).join('\n')}
+
+Generated by AxiomAI - axiom-math-ai.netlify.app
+    `.trim();
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `axiom-solution-${result.topic.replace(/\s+/g, '-').toLowerCase()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Solution exported!');
+  };
+
   return (
     <div className="min-h-screen pt-24 pb-12 px-4 max-w-5xl mx-auto">
+
+      {/* Limit Modal */}
+      <AnimatePresence>
+        {showLimitModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-card border border-border rounded-3xl p-8 max-w-md w-full text-center"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-accent-primary/10 flex items-center justify-center mx-auto mb-6">
+                <Sigma className="text-accent-primary" size={32} />
+              </div>
+              <h2 className="text-2xl font-bold mb-3">Free Limit Reached</h2>
+              <p className="text-text-secondary mb-8">
+                You've used all <strong className="text-white">5 free solves</strong> this month. Upgrade to Axiom Plus for 100 solves/month or Pro for unlimited access.
+              </p>
+              <div className="flex flex-col gap-3">
+                <Link
+                  to="/pricing"
+                  className="w-full py-4 rounded-2xl bg-accent-primary text-white font-bold hover:opacity-90 transition-all shadow-glow"
+                >
+                  View Plans & Upgrade
+                </Link>
+                <button
+                  onClick={() => setShowLimitModal(false)}
+                  className="w-full py-4 rounded-2xl border border-border text-text-muted font-bold hover:bg-elevated transition-all"
+                >
+                  Maybe Later
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence mode="wait">
         {!result ? (
           <motion.div
@@ -163,7 +234,18 @@ export default function Solve() {
 
             <SolveInput id="solve-input" onSolve={handleSolve} isLoading={isLoading} />
 
-            <div id="features-grid" className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
+            {/* Stop button */}
+            {isLoading && (
+              <button
+                onClick={handleStop}
+                className="mt-6 flex items-center gap-2 px-6 py-3 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all font-bold text-sm"
+              >
+                <Square size={16} />
+                Stop Generation
+              </button>
+            )}
+
+            <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
               {[
                 { icon: <Sparkles className="text-accent-primary" />, title: 'Smart Steps', desc: 'Clear, logical breakdowns of every problem.' },
                 { icon: <History className="text-accent-secondary" />, title: 'Auto-History', desc: 'Never lose a solution again with cloud sync.' },
@@ -186,13 +268,13 @@ export default function Solve() {
           >
             <button
               onClick={() => setResult(null)}
-              className="flex items-center gap-2 text-text-muted hover:text-white transition-colors mb-4 group"
+              className="flex items-center gap-2 text-text-muted hover:text-white transition-colors mb-4"
             >
               <div className="rotate-180"><ArrowRight size={18} /></div>
               <span className="text-xs font-bold uppercase tracking-widest">Solve another</span>
             </button>
 
-            <div id="solve-result-container" className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="md:col-span-2 bento-card border-accent-primary/20 bg-gradient-to-br from-card to-secondary">
                 <div className="flex items-center justify-between mb-8">
                   <div className="flex items-center gap-2">
@@ -204,6 +286,14 @@ export default function Solve() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleExportPDF}
+                      className="flex items-center gap-1 p-2 rounded-lg hover:bg-elevated text-text-muted hover:text-accent-primary transition-all text-xs font-bold"
+                      title="Export Solution"
+                    >
+                      <Download size={16} />
+                      <span className="hidden sm:inline">Export</span>
+                    </button>
                     <button className="p-2 rounded-lg hover:bg-elevated text-text-muted transition-all">
                       <Share2 size={16} />
                     </button>
@@ -234,7 +324,7 @@ export default function Solve() {
                   onClick={() => setShowChat(true)}
                   className="w-full bento-card bg-accent-primary/5 border-accent-primary/20 flex items-center gap-4 hover:scale-[1.02] active:scale-[0.98] transition-all text-left group"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-accent-primary text-white flex items-center justify-center shadow-glow group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-xl bg-accent-primary text-white flex items-center justify-center shadow-glow">
                     <GraduationCap size={24} />
                   </div>
                   <div>
@@ -247,7 +337,7 @@ export default function Solve() {
                   onClick={() => setShowQuiz(true)}
                   className="w-full bento-card bg-accent-secondary/5 border-accent-secondary/20 flex items-center gap-4 hover:scale-[1.02] active:scale-[0.98] transition-all text-left group"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-accent-secondary text-white flex items-center justify-center shadow-glow group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-xl bg-accent-secondary text-white flex items-center justify-center shadow-glow">
                     <Brain size={24} />
                   </div>
                   <div>
@@ -262,7 +352,7 @@ export default function Solve() {
                   <div className="mt-6 space-y-3 border-t border-border pt-4">
                     <div className="flex justify-between text-xs">
                       <span className="text-text-muted">Complexity</span>
-                      <span className="font-bold">Calculated</span>
+                      <span className="font-bold">{result.difficulty}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-text-muted">Confidence</span>
@@ -270,15 +360,6 @@ export default function Solve() {
                     </div>
                   </div>
                 </div>
-
-                {result.has_graph && result.graph_function && (
-                  <div className="bento-card border-accent-secondary/20">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-accent-secondary mb-4">Dynamic Plot</h3>
-                    <div className="aspect-square bg-primary rounded-2xl flex items-center justify-center border border-border border-dashed font-mono text-[10px] text-text-muted mt-2">
-                      {result.graph_function}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </motion.div>
@@ -286,15 +367,10 @@ export default function Solve() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showChat && result && (
-          <ProfessorChat solveContext={result} onClose={() => setShowChat(false)} />
-        )}
+        {showChat && result && <ProfessorChat solveContext={result} onClose={() => setShowChat(false)} />}
       </AnimatePresence>
-
       <AnimatePresence>
-        {showQuiz && result && (
-          <QuizPortal topic={result.topic} onClose={() => setShowQuiz(false)} />
-        )}
+        {showQuiz && result && <QuizPortal topic={result.topic} onClose={() => setShowQuiz(false)} />}
       </AnimatePresence>
     </div>
   );

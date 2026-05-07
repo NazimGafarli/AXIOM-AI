@@ -1,11 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { Send, X, GraduationCap, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import { ai, MODEL_NAMES, isQuotaError } from '../lib/gemini';
+import { isQuotaError } from '../lib/gemini';
+import Groq from 'groq-sdk';
+
+const groq = new Groq({
+  apiKey: import.meta.env.VITE_GROQ_API_KEY,
+  dangerouslyAllowBrowser: true,
+});
 
 interface Message {
   role: 'user' | 'assistant';
@@ -49,46 +55,26 @@ export default function ProfessorChat({ solveContext, onClose }: ProfessorChatPr
       2. Be encouraging but rigorous.
       3. Use the Socratic method: guide the student rather than just giving the answer if they ask for one.`;
 
-      const contents = [
-        ...messages.map(m => ({
-          role: m.role === "user" ? "user" : "model" as const,
-          parts: [{ text: m.content }]
-        })),
-        { role: "user" as const, parts: [{ text: userMessage.content }] }
-      ];
+      const response = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemInstruction },
+          ...messages.map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })),
+          { role: 'user', content: userMessage.content },
+        ],
+      });
 
-      const generate = async (modelName: string) => {
-        return await ai.models.generateContent({
-          model: modelName,
-          contents: [
-            ...messages.map(m => ({
-              role: m.role === "user" ? "user" : "model",
-              parts: [{ text: m.content }]
-            })),
-            { role: "user", parts: [{ text: userMessage.content }] }
-          ],
-          config: { systemInstruction }
-        });
-      };
+      const reply = response.choices[0]?.message?.content;
+      if (!reply) throw new Error('Failed to chat');
 
-      let response;
-      try {
-        response = await generate(MODEL_NAMES.FLASH);
-      } catch (err) {
-        if (isQuotaError(err)) {
-          response = await generate(MODEL_NAMES.LITE);
-        } else {
-          throw err;
-        }
-      }
-
-      if (!response.text) throw new Error('Failed to chat');
-
-      setMessages(prev => [...prev, { role: 'assistant', content: response.text! }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
     } catch (error: any) {
       console.error(error);
       const isQuota = isQuotaError(error);
-      const fallbackMsg = isQuota 
+      const fallbackMsg = isQuota
         ? "I'm a bit overwhelmed with students right now. Please try again in a moment!"
         : "I'm sorry, I encountered an issue. Let me try that again.";
       setMessages(prev => [...prev, { role: 'assistant', content: fallbackMsg }]);
@@ -123,13 +109,13 @@ export default function ProfessorChat({ solveContext, onClose }: ProfessorChatPr
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] p-4 rounded-2xl text-sm ${
-              m.role === 'user' 
-                ? 'bg-accent-primary text-white rounded-tr-none shadow-glow' 
+              m.role === 'user'
+                ? 'bg-accent-primary text-white rounded-tr-none shadow-glow'
                 : 'bg-elevated text-text-primary rounded-tl-none border border-border'
             }`}>
               <div className="markdown-body">
-                <ReactMarkdown 
-                  remarkPlugins={[remarkMath]} 
+                <ReactMarkdown
+                  remarkPlugins={[remarkMath]}
                   rehypePlugins={[rehypeKatex]}
                 >
                   {m.content}

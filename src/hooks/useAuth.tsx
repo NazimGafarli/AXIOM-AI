@@ -9,15 +9,19 @@ import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { auth } from '../lib/firebase';
-import { db } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
+
+// ── ADMIN EMAILS — these get full Elite access always ──
+const ADMIN_EMAILS = [
+  'gafarlin4zim@gmail.com',   // replace with your real email
+];
 
 export interface UserPlan {
   isPro: boolean;
   plan: 'free' | 'plus' | 'pro' | 'elite';
-  solveLimit: number; // -1 = unlimited
+  solveLimit: number;
 }
 
 interface AuthContextType {
@@ -32,6 +36,7 @@ interface AuthContextType {
 }
 
 const DEFAULT_PLAN: UserPlan = { isPro: false, plan: 'free', solveLimit: 5 };
+const ADMIN_PLAN: UserPlan = { isPro: true, plan: 'elite', solveLimit: -1 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -43,7 +48,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
+
       if (firebaseUser) {
+        // Admin bypass — full elite access
+        if (firebaseUser.email && ADMIN_EMAILS.includes(firebaseUser.email)) {
+          setUserPlan(ADMIN_PLAN);
+          setLoading(false);
+          return;
+        }
+
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
@@ -54,7 +67,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               solveLimit: data.solveLimit ?? 5,
             });
           } else {
-            // New user — create their doc
             await setDoc(doc(db, 'users', firebaseUser.uid), {
               email: firebaseUser.email,
               isPro: false,
@@ -71,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUserPlan(DEFAULT_PLAN);
       }
+
       setLoading(false);
     });
     return unsubscribe;

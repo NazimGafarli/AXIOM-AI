@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /research
+Disallow: /reset-password
+
+Sitemap: https://axiom-math-ai.netlify.app/sitemap.xml

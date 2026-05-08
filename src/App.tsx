@@ -10,6 +10,7 @@ import ResearchLab from './pages/ResearchLab';
 import Signup from './pages/Signup';
 import ResetPassword from './pages/ResetPassword';
 import { Toaster } from 'sonner';
+import Guide from './pages/Guide';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();

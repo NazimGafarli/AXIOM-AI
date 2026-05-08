@@ -9,45 +9,32 @@ export const STRIPE_PLANS = {
     name: 'Axiom Pro',
     priceId: 'price_1TUbFVGSON2VmEJyCKKutXSc',
     price: '$49.99',
-    limit: -1, // unlimited
+    limit: -1,
   },
   elite: {
     name: 'Research Elite',
     priceId: 'price_1TUbGIGSON2VmEJyyN6Z4JkB',
     price: '$69.99',
-    limit: -1, // unlimited
+    limit: -1,
   },
 };
 
-export async function createCheckoutSession(priceId: string, userEmail: string): Promise<void> {
-  const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-  if (!publishableKey) {
-    throw new Error('Stripe publishable key is not configured.');
-  }
-
-  const { loadStripe } = await import('@stripe/stripe-js');
-  const stripe = await loadStripe(publishableKey);
-  if (!stripe) throw new Error('Failed to load Stripe.');
-
-  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+export async function createCheckoutSession(
+  priceId: string,
+  userEmail: string,
+  userId: string
+): Promise<void> {
+  const response = await fetch('/.netlify/functions/create-checkout', {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      'payment_method_types[]': 'card',
-      'mode': 'subscription',
-      'line_items[0][price]': priceId,
-      'line_items[0][quantity]': '1',
-      'customer_email': userEmail,
-      'success_url': `${window.location.origin}/dashboard?upgraded=true`,
-      'cancel_url': `${window.location.origin}/pricing`,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ priceId, userEmail, userId }),
   });
 
-  const session = await response.json();
-  if (session.error) throw new Error(session.error.message);
+  const data = await response.json();
+  if (!response.ok || data.error) {
+    throw new Error(data.error || 'Failed to create checkout session');
+  }
 
-  await stripe.redirectToCheckout({ sessionId: session.id });
+  // Redirect to Stripe hosted checkout page
+  window.location.href = data.url;
 }

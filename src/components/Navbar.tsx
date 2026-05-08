@@ -15,6 +15,7 @@ export default function Navbar() {
     { to: '/dashboard', label: 'Analysis' },
     { to: '/pricing', label: 'Pricing' },
     { to: '/policy', label: 'Policy' },
+    { to: '/guide', label: 'Guide' },
   ];
 
   return (

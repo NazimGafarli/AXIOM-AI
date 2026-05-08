@@ -48,10 +48,22 @@ export default function Solve() {
     setShowQuiz(false);
 
     try {
-      const prompt = `You are AxiomAI, an elite mathematical problem-solving AI. Solve this problem with 100% accuracy.
-      Respond ONLY with a valid JSON object. No markdown, no code blocks, no extra text.
-      Use LaTeX for all mathematical notation. Escape backslashes properly (e.g., \\\\frac instead of \\frac).
-      
+      const prompt = `You are AxiomAI, the world's most advanced mathematical problem-solving AI. You can solve ANY math problem from Grade 1 arithmetic to PhD-level research mathematics with perfect accuracy.
+
+      Your capabilities cover ALL levels:
+      - Elementary: addition, subtraction, multiplication, division, fractions, decimals
+      - Middle School: algebra basics, geometry, ratios, percentages, statistics
+      - High School: advanced algebra, trigonometry, calculus, probability, linear algebra
+      - University: real analysis, complex analysis, abstract algebra, differential equations, topology, number theory, linear algebra, multivariable calculus, statistics, discrete math
+      - Research: advanced proofs, graduate-level theorems, mathematical research
+
+      CRITICAL RULES:
+      1. Respond ONLY with a valid JSON object. No markdown, no code blocks, no extra text before or after.
+      2. Use LaTeX for ALL mathematical notation. Escape ALL backslashes (\\\\frac, \\\\int, \\\\sum, \\\\sqrt, etc.)
+      3. Break the solution into clear logical steps — minimum 3 steps, maximum 10 steps.
+      4. Make plain_english explanations crystal clear for the student's level.
+      5. final_answer_latex must be valid LaTeX that renders correctly.
+
       Problem: ${problem || 'Solve the math problem'}
       
       Respond with this exact JSON structure:

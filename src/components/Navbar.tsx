@@ -9,14 +9,15 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const links = [
-    { to: '/solve', label: 'Solve' },
-    { to: '/research', label: 'Research' },
-    { to: '/dashboard', label: 'Analysis' },
-    { to: '/pricing', label: 'Pricing' },
-    { to: '/policy', label: 'Policy' },
-    { to: '/guide', label: 'Guide' },
-  ];
+const links = [
+  { to: '/solve', label: 'Solve' },
+  { to: '/study', label: 'Study' },
+  { to: '/research', label: 'Research' },
+  { to: '/dashboard', label: 'Analysis' },
+  { to: '/pricing', label: 'Pricing' },
+  { to: '/guide', label: 'Guide' },
+  { to: '/policy', label: 'Policy' },
+];
 
   return (
     <nav className="fixed top-0 left-0 right-0 h-16 border-b border-border bg-primary/95 backdrop-blur-md z-40">

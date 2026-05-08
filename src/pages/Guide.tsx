@@ -1,225 +1,88 @@
-import { motion } from 'motion/react';
-import { Sigma, Camera, Brain, GraduationCap, Microscope, Zap, ChevronRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './hooks/useAuth';
+import Navbar from './components/Navbar';
+import Landing from './pages/Landing';
+import Solve from './pages/Solve';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Pricing from './pages/Pricing';
+import ResearchLab from './pages/ResearchLab';
+import Signup from './pages/Signup';
+import ResetPassword from './pages/ResetPassword';
+import Guide from './pages/Guide';
+import { Toaster } from 'sonner';
 
-export default function Guide() {
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" />;
+  return <>{children}</>;
+}
+
+function App() {
   return (
-    <div className="min-h-screen pt-32 pb-20 px-6 max-w-5xl mx-auto">
-      
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-20">
-        <span className="px-4 py-1.5 rounded-full bg-accent-primary/10 text-accent-primary text-xs font-bold uppercase tracking-widest">
-          Complete Guide
-        </span>
-        <h1 className="text-5xl font-bold mt-6 mb-4 tracking-tight">How to Use AxiomAI</h1>
-        <p className="text-text-secondary text-lg max-w-2xl mx-auto">
-          Master every feature of AxiomAI — from solving basic arithmetic to university-level proofs.
-        </p>
-      </motion.div>
-
-      {/* Quick Start */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bento-card mb-8 border-accent-primary/20 bg-accent-primary/5">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center text-white">
-            <Zap size={20} />
-          </div>
-          <h2 className="text-2xl font-bold">Quick Start</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[
-            { step: '1', title: 'Type or Upload', desc: 'Enter your math problem in the text box or upload a photo of it' },
-            { step: '2', title: 'Click Solve', desc: 'Hit the Solve button and AxiomAI will analyze your problem instantly' },
-            { step: '3', title: 'Review Steps', desc: 'Get a full step-by-step breakdown with LaTeX formulas and plain English explanations' },
-          ].map((item) => (
-            <div key={item.step} className="p-4 rounded-2xl bg-card border border-border">
-              <div className="w-8 h-8 rounded-full bg-accent-primary text-white flex items-center justify-center font-bold text-sm mb-3">
-                {item.step}
-              </div>
-              <h3 className="font-bold mb-1">{item.title}</h3>
-              <p className="text-sm text-text-muted">{item.desc}</p>
-            </div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* What You Can Solve */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="bento-card mb-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center text-white">
-            <Sigma size={20} />
-          </div>
-          <h2 className="text-2xl font-bold">What You Can Solve</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {[
-            {
-              level: 'Grade 1–5 · Elementary',
-              color: 'text-emerald-400',
-              examples: [
-                '25 + 47 = ?',
-                'What is 8 × 7?',
-                '3/4 + 1/2 = ?',
-                'What is 15% of 200?',
-              ],
-            },
-            {
-              level: 'Grade 6–8 · Middle School',
-              color: 'text-blue-400',
-              examples: [
-                'Solve: 3x + 5 = 20',
-                'Find the area of a circle with radius 6',
-                'Simplify: (2x + 3)(x - 4)',
-                'What is the mean of 4, 7, 9, 12, 18?',
-              ],
-            },
-            {
-              level: 'Grade 9–12 · High School',
-              color: 'text-purple-400',
-              examples: [
-                'Solve x² - 5x + 6 = 0',
-                'Find the derivative of f(x) = x³ + 2x²',
-                'Prove that sin²θ + cos²θ = 1',
-                'Find the integral of 3x² + 2x dx',
-              ],
-            },
-            {
-              level: 'University Level',
-              color: 'text-accent-primary',
-              examples: [
-                'Solve the differential equation dy/dx = 2xy',
-                'Find the eigenvalues of matrix [[3,1],[1,3]]',
-                'Prove that √2 is irrational',
-                'Evaluate the Laplace transform of e^(2t)',
-              ],
-            },
-          ].map((section) => (
-            <div key={section.level} className="p-5 rounded-2xl bg-secondary border border-border">
-              <h3 className={`text-xs font-bold uppercase tracking-widest mb-4 ${section.color}`}>
-                {section.level}
-              </h3>
-              <ul className="space-y-2">
-                {section.examples.map((ex) => (
-                  <li key={ex} className="flex items-center gap-2 text-sm text-text-secondary">
-                    <ChevronRight size={14} className="text-accent-primary flex-shrink-0" />
-                    <span className="font-mono">{ex}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Features Guide */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bento-card mb-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center text-white">
-            <Brain size={20} />
-          </div>
-          <h2 className="text-2xl font-bold">Features Guide</h2>
-        </div>
-        <div className="space-y-6">
-          {[
-            {
-              icon: <Camera size={20} />,
-              title: 'Image Upload',
-              badge: 'Plus & above',
-              badgeColor: 'bg-blue-500/10 text-blue-400',
-              desc: 'Take a photo of any handwritten or printed math problem and upload it. AxiomAI will read and solve it automatically.',
-              steps: ['Click the camera icon in the solve box', 'Select or drag your image', 'Click Solve — AxiomAI reads the problem from the image'],
-            },
-            {
-              icon: <GraduationCap size={20} />,
-              title: 'AI Professor Chat',
-              badge: 'Plus & above',
-              badgeColor: 'bg-purple-500/10 text-purple-400',
-              desc: 'After solving a problem, click "Ask AI Professor" to have a conversation with an AI tutor about the topic. Ask follow-up questions, request alternative methods, or explore related concepts.',
-              steps: ['Solve any problem first', 'Click "Ask AI Professor" on the right', 'Type your question and press Enter'],
-            },
-            {
-              icon: <Brain size={20} />,
-              title: 'Instant Challenge Quiz',
-              badge: 'Plus & above',
-              badgeColor: 'bg-emerald-500/10 text-emerald-400',
-              desc: 'Test your understanding after solving. AxiomAI generates a custom 3-question quiz based on the exact topic you just solved.',
-              steps: ['Solve any problem', 'Click "Instant Challenge"', 'Answer 3 questions and see your score'],
-            },
-            {
-              icon: <Microscope size={20} />,
-              title: 'Research Lab',
-              badge: 'Pro & Elite',
-              badgeColor: 'bg-accent-primary/10 text-accent-primary',
-              desc: 'Advanced tools for researchers and university students. Analyze mathematical papers, identify structural fingerprints of formulas, and explore deep theoretical connections.',
-              steps: ['Go to Research in the navbar', 'Choose Paper Analysis or Fingerprinting', 'Upload a document or enter a formula'],
-            },
-          ].map((feature) => (
-            <div key={feature.title} className="p-6 rounded-2xl bg-secondary border border-border">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-accent-primary/10 text-accent-primary flex items-center justify-center">
-                    {feature.icon}
-                  </div>
-                  <h3 className="font-bold text-lg">{feature.title}</h3>
+    <AuthProvider>
+      <Router>
+        <div className="min-h-screen bg-bg-primary text-text-primary selection:bg-accent-primary/30">
+          <Navbar />
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/solve" element={<Solve />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/guide" element={<Guide />} />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/research" element={
+              <ProtectedRoute>
+                <ResearchLab />
+              </ProtectedRoute>
+            } />
+            <Route path="/policy" element={
+              <div className="pt-32 px-6 max-w-3xl mx-auto">
+                <h1 className="text-4xl font-bold mb-8">Return Policy</h1>
+                <p className="text-text-secondary leading-relaxed mb-6">
+                  We believe in our product, but we understand it might not be for everyone.
+                  That's why we offer a <b>15-Day No-Questions-Asked Return Policy</b>.
+                </p>
+                <div className="p-6 rounded-2xl bg-accent-primary/5 border border-accent-primary/20">
+                  <h3 className="font-bold text-accent-primary mb-2">How it works:</h3>
+                  <ul className="list-disc pl-5 space-y-2 text-sm text-text-secondary">
+                    <li>Send an email to support@axiomai.com within 15 days of your first payment.</li>
+                    <li>Provide your account email and transaction ID.</li>
+                    <li>Receive your full refund within 5-7 business days.</li>
+                  </ul>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${feature.badgeColor}`}>
-                  {feature.badge}
-                </span>
               </div>
-              <p className="text-sm text-text-secondary mb-4 leading-relaxed">{feature.desc}</p>
-              <div className="space-y-2">
-                {feature.steps.map((step, i) => (
-                  <div key={i} className="flex items-center gap-3 text-sm">
-                    <div className="w-5 h-5 rounded-full bg-accent-primary/20 text-accent-primary flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                      {i + 1}
-                    </div>
-                    <span className="text-text-muted">{step}</span>
+            } />
+            <Route path="/team" element={
+              <div className="pt-32 px-6 max-w-4xl mx-auto text-center">
+                <h1 className="text-4xl font-bold mb-12">Who Made AxiomAI?</h1>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="bento-card">
+                    <div className="w-20 h-20 bg-accent-primary rounded-full mx-auto mb-4" />
+                    <h3 className="font-bold">Axiom Engineering</h3>
+                    <p className="text-sm text-text-muted">Focusing on AI model optimization and mathematical reasoning accuracy.</p>
                   </div>
-                ))}
+                  <div className="bento-card">
+                    <div className="w-20 h-20 bg-accent-secondary rounded-full mx-auto mb-4" />
+                    <h3 className="font-bold">Axiom Design</h3>
+                    <p className="text-sm text-text-muted">Crafting the intuitive bento-style user interface for a seamless learning experience.</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            } />
+          </Routes>
+          <Toaster position="bottom-right" theme="dark" />
         </div>
-      </motion.div>
-
-      {/* Tips */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="bento-card mb-8">
-        <h2 className="text-2xl font-bold mb-6">Pro Tips for Best Results</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            { tip: 'Be specific', desc: 'Write "solve x² - 4 = 0" instead of just "quadratic"' },
-            { tip: 'Use proper notation', desc: 'Write x^2 for x², sqrt(x) for √x, and x/y for fractions' },
-            { tip: 'Include context', desc: 'Add "using integration by parts" or "using the quadratic formula" if you want a specific method' },
-            { tip: 'Upload clear images', desc: 'Make sure the photo is well-lit and the writing is legible for best image results' },
-            { tip: 'Ask follow-ups', desc: 'Use Professor Chat to ask "why does this step work?" or "show me another method"' },
-            { tip: 'Practice with quizzes', desc: 'After every solve, take the Instant Challenge to reinforce your understanding' },
-          ].map((item) => (
-            <div key={item.tip} className="flex gap-3 p-4 rounded-xl bg-secondary border border-border">
-              <div className="w-2 h-2 rounded-full bg-accent-primary mt-2 flex-shrink-0" />
-              <div>
-                <h4 className="font-bold text-sm mb-1">{item.tip}</h4>
-                <p className="text-xs text-text-muted leading-relaxed">{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Copyright */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bento-card border-border/50 text-center">
-        <h2 className="text-xl font-bold mb-4">Copyright & Legal</h2>
-        <div className="space-y-3 text-sm text-text-secondary max-w-2xl mx-auto">
-          <p>© 2026 AxiomAI. All rights reserved.</p>
-          <p>AxiomAI is a proprietary AI-powered mathematics platform. All content, interfaces, algorithms, and brand assets are the exclusive intellectual property of AxiomAI.</p>
-          <p>Solutions generated by AxiomAI are for educational purposes only. Users are responsible for verifying results for academic or professional use.</p>
-          <p>Unauthorized reproduction, distribution, or commercial use of any part of this platform is strictly prohibited.</p>
-          <div className="flex justify-center gap-6 mt-6 text-xs">
-            <Link to="/policy" className="text-accent-primary hover:underline">Privacy Policy</Link>
-            <Link to="/policy" className="text-accent-primary hover:underline">Terms of Service</Link>
-            <Link to="/pricing" className="text-accent-primary hover:underline">Pricing</Link>
-          </div>
-        </div>
-      </motion.div>
-
-    </div>
+      </Router>
+    </AuthProvider>
   );
 }
+
+export default App;

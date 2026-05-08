@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, RotateCcw, BookOpen, Lock, Crown } from 'lucide-react';
+import { Play, Pause, RotateCcw, BookOpen, Lock, Crown, Sigma } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
@@ -21,10 +21,30 @@ const DURATIONS = [
 ];
 
 const AMBIENCE = [
-  { id: 'rain', label: 'Rain', icon: '🌧' },
-  { id: 'cafe', label: 'Café', icon: '☕' },
-  { id: 'night', label: 'Night', icon: '🌙' },
-  { id: 'fire', label: 'Fireplace', icon: '🔥' },
+  { id: 'rain', label: 'Rain', icon: '🌧', desc: 'Gentle rainfall' },
+  { id: 'cafe', label: 'Café', icon: '☕', desc: 'Soft chatter' },
+  { id: 'night', label: 'Night', icon: '🌙', desc: 'Silent focus' },
+  { id: 'fire', label: 'Fireplace', icon: '🔥', desc: 'Warm crackle' },
+];
+
+// Fixed star positions — no Math.random() to avoid React issues
+const STARS = [
+  { top: '8%', left: '12%', size: 1.5 }, { top: '15%', left: '34%', size: 1 },
+  { top: '6%', left: '55%', size: 2 },   { top: '20%', left: '72%', size: 1 },
+  { top: '11%', left: '88%', size: 1.5 }, { top: '30%', left: '5%', size: 1 },
+  { top: '25%', left: '48%', size: 1 },  { top: '18%', left: '91%', size: 2 },
+  { top: '35%', left: '22%', size: 1 },  { top: '28%', left: '67%', size: 1.5 },
+  { top: '42%', left: '38%', size: 1 },  { top: '38%', left: '80%', size: 1 },
+  { top: '5%', left: '78%', size: 1 },   { top: '22%', left: '15%', size: 2 },
+  { top: '45%', left: '58%', size: 1.5 },
+];
+
+const CLOUDS = [
+  { width: 70, left: '4%', bottom: '28%', opacity: 0.07 },
+  { width: 100, left: '18%', bottom: '18%', opacity: 0.09 },
+  { width: 55, left: '38%', bottom: '32%', opacity: 0.06 },
+  { width: 85, left: '55%', bottom: '22%', opacity: 0.08 },
+  { width: 60, left: '76%', bottom: '30%', opacity: 0.07 },
 ];
 
 type Phase = 'setup' | 'active' | 'complete';
@@ -46,7 +66,8 @@ export default function Study() {
   );
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const totalSeconds = (showCustom ? parseInt(customMinutes) || 25 : duration) * 60;
+  const activeMins = showCustom ? parseInt(customMinutes) || 25 : duration;
+  const totalSeconds = activeMins * 60;
   const progress = totalSeconds > 0 ? (totalSeconds - secondsLeft) / totalSeconds : 0;
 
   const formatTime = (s: number) => {
@@ -56,10 +77,14 @@ export default function Study() {
   };
 
   const startSession = () => {
-    const mins = showCustom ? parseInt(customMinutes) || 25 : duration;
-    setSecondsLeft(mins * 60);
+    setSecondsLeft(activeMins * 60);
     setPhase('active');
     setPaused(false);
+  };
+
+  const endSession = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    setPhase('setup');
   };
 
   useEffect(() => {
@@ -83,7 +108,10 @@ export default function Study() {
     return () => clearInterval(intervalRef.current!);
   }, [phase, paused]);
 
-  // ── LOCKED: not pro/elite ──
+  const currentSubject = SUBJECTS.find(s => s.id === subject)!;
+  const currentAmbience = AMBIENCE.find(a => a.id === ambience)!;
+
+  // ── LOCKED ──
   if (!canAccess) {
     return (
       <div className="min-h-screen pt-32 flex items-center justify-center px-4">
@@ -100,7 +128,7 @@ export default function Study() {
           </div>
           <h1 className="text-3xl font-bold mb-3">Study Sessions</h1>
           <p className="text-text-secondary mb-8 leading-relaxed">
-            Focus sessions with timers, ambience, and subject tracking are available on Axiom Pro and Research Elite plans.
+            Focus sessions with timers, ambience sounds, and subject tracking are available on Axiom Pro and Research Elite plans.
           </p>
           <Link
             to="/pricing"
@@ -219,6 +247,7 @@ export default function Study() {
                   >
                     <div className="text-xl mb-1">{a.icon}</div>
                     <div className="text-[10px] text-text-muted font-bold">{a.label}</div>
+                    <div className="text-[9px] text-text-muted opacity-60 mt-0.5">{a.desc}</div>
                   </button>
                 ))}
               </div>
@@ -237,55 +266,67 @@ export default function Study() {
         {/* ── ACTIVE ── */}
         {phase === 'active' && (
           <motion.div key="active" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center">
-            <div className="text-center mb-10">
+
+            <div className="text-center mb-8">
               <p className="text-text-muted text-xs font-bold uppercase tracking-widest mb-2">
-                {SUBJECTS.find(s => s.id === subject)?.icon} {SUBJECTS.find(s => s.id === subject)?.label} · {AMBIENCE.find(a => a.id === ambience)?.icon} {AMBIENCE.find(a => a.id === ambience)?.label}
+                {currentSubject.icon} {currentSubject.label} · {currentAmbience.icon} {currentAmbience.label}
               </p>
               <h2 className="text-2xl font-bold">Stay focused. You've got this.</h2>
             </div>
 
-            {/* Airplane window visual */}
-            <div className="w-full rounded-3xl overflow-hidden mb-8 relative" style={{ height: '220px', background: 'linear-gradient(180deg, #0a0520 0%, #1a0a5e 50%, #6d28d9 100%)' }}>
-              <div className="absolute inset-0 flex items-center justify-center">
-                {/* Stars */}
-                {[...Array(20)].map((_, i) => (
-                  <div key={i} className="absolute rounded-full bg-white opacity-40" style={{
-                    width: Math.random() * 2 + 1 + 'px',
-                    height: Math.random() * 2 + 1 + 'px',
-                    top: Math.random() * 60 + '%',
-                    left: Math.random() * 100 + '%',
-                  }} />
-                ))}
-                {/* Clouds */}
-                <div className="absolute bottom-12 left-0 right-0 flex justify-around px-4">
-                  {[60, 90, 50, 75, 40].map((w, i) => (
-                    <div key={i} className="rounded-full" style={{
-                      width: w + 'px',
-                      height: '18px',
-                      background: 'rgba(255,255,255,0.07)',
-                      marginTop: i % 2 === 0 ? '0' : '10px',
-                    }} />
-                  ))}
+            {/* Airplane window */}
+            <div
+              className="w-full rounded-3xl overflow-hidden mb-8 relative"
+              style={{ height: '220px', background: 'linear-gradient(180deg, #05010f 0%, #0f0535 40%, #2d1060 75%, #6d28d9 100%)' }}
+            >
+              {/* Stars — fixed positions */}
+              {STARS.map((star, i) => (
+                <div
+                  key={i}
+                  className="absolute rounded-full bg-white"
+                  style={{ top: star.top, left: star.left, width: star.size + 'px', height: star.size + 'px', opacity: 0.5 }}
+                />
+              ))}
+
+              {/* Clouds */}
+              {CLOUDS.map((cloud, i) => (
+                <div
+                  key={i}
+                  className="absolute rounded-full"
+                  style={{
+                    width: cloud.width + 'px',
+                    height: '20px',
+                    left: cloud.left,
+                    bottom: cloud.bottom,
+                    background: `rgba(255,255,255,${cloud.opacity})`,
+                  }}
+                />
+              ))}
+
+              {/* Window grid overlay */}
+              <div className="absolute inset-3 rounded-2xl" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+                  <div style={{ borderRight: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }} />
+                  <div style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }} />
+                  <div style={{ borderRight: '1px solid rgba(255,255,255,0.04)' }} />
+                  <div />
                 </div>
               </div>
-              {/* Window frame overlay */}
-              <div className="absolute inset-3 rounded-2xl border border-white/8 grid grid-cols-2 grid-rows-2 gap-0">
-                <div className="border-r border-b border-white/5" />
-                <div className="border-b border-white/5" />
-                <div className="border-r border-white/5" />
-                <div />
-              </div>
-              <div className="absolute bottom-4 left-0 right-0 text-center text-white/25 text-xs font-bold tracking-widest uppercase">
+
+              <div className="absolute bottom-4 left-0 right-0 text-center text-[10px] font-bold tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.2)' }}>
                 ✈ Focus flight in progress
               </div>
             </div>
 
-            {/* Timer — bottom of page via fixed bar, also shown here in content */}
+            {/* Timer */}
             <div className="text-center mb-6">
-              <div className="text-7xl font-mono font-bold tracking-tight mb-2" style={{ color: paused ? '#888' : 'white' }}>
+              <div
+                className="text-7xl font-mono font-bold tracking-tight mb-2 transition-colors"
+                style={{ color: paused ? 'rgba(255,255,255,0.3)' : 'white' }}
+              >
                 {formatTime(secondsLeft)}
               </div>
-              <p className="text-text-muted text-sm">{paused ? 'Paused' : 'remaining'}</p>
+              <p className="text-text-muted text-sm">{paused ? 'Paused — press resume to continue' : 'remaining'}</p>
             </div>
 
             {/* Progress bar */}
@@ -297,22 +338,37 @@ export default function Study() {
               />
             </div>
 
-            <div className="flex gap-4">
+            {/* Controls */}
+            <div className="flex gap-4 mb-10">
               <button
                 onClick={() => setPaused(p => !p)}
-                className="flex items-center gap-2 px-8 py-4 rounded-2xl bg-accent-primary text-white font-bold hover:opacity-90 transition-all"
+                className="flex items-center gap-2 px-8 py-4 rounded-2xl bg-accent-primary text-white font-bold hover:opacity-90 transition-all shadow-glow"
               >
                 {paused ? <Play size={18} /> : <Pause size={18} />}
                 {paused ? 'Resume' : 'Pause'}
               </button>
               <button
-                onClick={() => { setPhase('setup'); clearInterval(intervalRef.current!); }}
+                onClick={endSession}
                 className="flex items-center gap-2 px-6 py-4 rounded-2xl border border-border text-text-muted font-bold hover:bg-elevated transition-all"
               >
                 <RotateCcw size={16} />
                 End
               </button>
             </div>
+
+            {/* Solve prompt */}
+            <Link
+              to="/solve"
+              className="flex items-center gap-3 px-6 py-4 rounded-2xl border border-border bg-secondary hover:border-accent-primary/30 transition-all w-full"
+            >
+              <div className="w-9 h-9 rounded-xl bg-accent-primary/10 flex items-center justify-center">
+                <Sigma size={18} className="text-accent-primary" />
+              </div>
+              <div>
+                <div className="text-sm font-bold">Stuck on a problem?</div>
+                <div className="text-xs text-text-muted">Open AxiomAI Solve — your timer keeps running</div>
+              </div>
+            </Link>
           </motion.div>
         )}
 
@@ -322,7 +378,7 @@ export default function Study() {
             <div className="text-6xl mb-6">🎉</div>
             <h1 className="text-4xl font-bold mb-3">Session complete!</h1>
             <p className="text-text-secondary mb-2">
-              Great work studying {SUBJECTS.find(s => s.id === subject)?.label}.
+              Great work studying {currentSubject.label}.
             </p>
             <p className="text-emerald-400 text-sm font-bold mb-10">
               {sessionsToday} session{sessionsToday > 1 ? 's' : ''} completed today 🔥
@@ -330,7 +386,7 @@ export default function Study() {
             <div className="flex flex-col gap-3 w-full max-w-xs">
               <button
                 onClick={() => setPhase('setup')}
-                className="w-full py-4 rounded-2xl bg-accent-primary text-white font-bold hover:opacity-90 transition-all"
+                className="w-full py-4 rounded-2xl bg-accent-primary text-white font-bold hover:opacity-90 transition-all shadow-glow"
               >
                 Start Another Session
               </button>
@@ -338,14 +394,15 @@ export default function Study() {
                 to="/solve"
                 className="w-full py-4 rounded-2xl border border-border text-text-muted font-bold hover:bg-elevated transition-all text-center"
               >
-                Go Solve a Problem
+                Go Solve a Problem →
               </Link>
             </div>
           </motion.div>
         )}
+
       </AnimatePresence>
 
-      {/* ── FIXED TIMER BAR (bottom) — only during active session ── */}
+      {/* ── FIXED TIMER BAR (bottom) ── */}
       <AnimatePresence>
         {phase === 'active' && (
           <motion.div
@@ -358,10 +415,13 @@ export default function Study() {
               <div className="flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="text-xs font-bold text-text-muted uppercase tracking-widest">
-                  {SUBJECTS.find(s => s.id === subject)?.label}
+                  {currentSubject.label}
                 </span>
               </div>
-              <div className="text-2xl font-mono font-bold" style={{ color: paused ? '#888' : 'white' }}>
+              <div
+                className="text-2xl font-mono font-bold transition-colors"
+                style={{ color: paused ? 'rgba(255,255,255,0.3)' : 'white' }}
+              >
                 {formatTime(secondsLeft)}
               </div>
               <button

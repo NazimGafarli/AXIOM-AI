@@ -1,23 +1,24 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Sigma, Menu, X, Settings } from 'lucide-react';
+import { Sigma, Menu, X, Settings, Lock } from 'lucide-react';
 import ThemeSwitcher from './ThemeSwitcher';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Navbar() {
-  const { user, signOut } = useAuth();
+  const { user, userPlan, signOut } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
-const links = [
-  { to: '/solve', label: 'Solve' },
-  { to: '/study', label: 'Study' },
-  { to: '/research', label: 'Research' },
-  { to: '/dashboard', label: 'Analysis' },
-  { to: '/pricing', label: 'Pricing' },
-  { to: '/guide', label: 'Guide' },
-  { to: '/policy', label: 'Policy' },
-];
+  const canStudy = userPlan?.plan === 'pro' || userPlan?.plan === 'elite';
+
+  const links = [
+    { to: '/solve', label: 'Solve' },
+    { to: '/research', label: 'Research' },
+    { to: '/dashboard', label: 'Analysis' },
+    { to: '/pricing', label: 'Pricing' },
+    { to: '/guide', label: 'Guide' },
+    { to: '/policy', label: 'Policy' },
+  ];
 
   return (
     <nav className="fixed top-0 left-0 right-0 h-16 border-b border-border bg-primary/95 backdrop-blur-md z-40">
@@ -36,6 +37,23 @@ const links = [
               {link.label}
             </Link>
           ))}
+
+          {/* Study — Pro/Elite only */}
+          {canStudy ? (
+            <Link to="/study" className="text-sm font-medium text-accent-primary hover:opacity-80 transition-colors flex items-center gap-1">
+              Study
+            </Link>
+          ) : (
+            <button
+              onClick={() => navigate('/pricing')}
+              className="text-sm font-medium text-text-muted flex items-center gap-1 hover:text-white transition-colors"
+              title="Pro plan required"
+            >
+              Study
+              <Lock size={11} className="opacity-50" />
+            </button>
+          )}
+
           <div className="h-4 w-[1px] bg-border mx-2" />
           <ThemeSwitcher />
           {user ? (
@@ -75,6 +93,21 @@ const links = [
               {link.label}
             </Link>
           ))}
+
+          {/* Study mobile */}
+          {canStudy ? (
+            <Link to="/study" onClick={() => setMenuOpen(false)} className="text-sm font-medium text-accent-primary py-2 border-b border-border/50">
+              Study ✦
+            </Link>
+          ) : (
+            <button
+              onClick={() => { navigate('/pricing'); setMenuOpen(false); }}
+              className="text-left text-sm font-medium text-text-muted py-2 border-b border-border/50 flex items-center gap-2"
+            >
+              Study <Lock size={11} className="opacity-40" /> <span className="text-[10px] text-accent-primary">Pro only</span>
+            </button>
+          )}
+
           {user && (
             <Link to="/settings" onClick={() => setMenuOpen(false)} className="text-sm font-medium text-text-secondary hover:text-white transition-colors py-2 border-b border-border/50">
               Settings

@@ -11,6 +11,8 @@ import Signup from './pages/Signup';
 import ResetPassword from './pages/ResetPassword';
 import { Toaster } from 'sonner';
 import Guide from './pages/Guide';
+import Study from './pages/Study';
+
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -42,6 +44,13 @@ function App() {
                 <ResearchLab />
               </ProtectedRoute>
             } />
+
+            <Route path="/study" element={
+              <ProtectedRoute>
+                <Study />
+              </ProtectedRoute>
+            } />
+            
             <Route path="/policy" element={
               <div className="pt-32 px-6 max-w-3xl mx-auto">
                 <h1 className="text-4xl font-bold mb-8">Return Policy</h1>

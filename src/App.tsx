@@ -9,10 +9,10 @@ import Pricing from './pages/Pricing';
 import ResearchLab from './pages/ResearchLab';
 import Signup from './pages/Signup';
 import ResetPassword from './pages/ResetPassword';
-import { Toaster } from 'sonner';
 import Guide from './pages/Guide';
+import Settings from './pages/Settings';
 import Study from './pages/Study';
-
+import { Toaster } from 'sonner';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -33,29 +33,29 @@ function App() {
             <Route path="/signup" element={<Signup />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/solve" element={<Solve />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/guide" element={<Guide />} />
+            <Route path="/study" element={<Study />} />
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Dashboard />
               </ProtectedRoute>
             } />
-            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            } />
             <Route path="/research" element={
               <ProtectedRoute>
                 <ResearchLab />
               </ProtectedRoute>
             } />
-
-            <Route path="/study" element={
-              <ProtectedRoute>
-                <Study />
-              </ProtectedRoute>
-            } />
-            
             <Route path="/policy" element={
               <div className="pt-32 px-6 max-w-3xl mx-auto">
                 <h1 className="text-4xl font-bold mb-8">Return Policy</h1>
                 <p className="text-text-secondary leading-relaxed mb-6">
-                  We believe in our product, but we understand it might not be for everyone. 
+                  We believe in our product, but we understand it might not be for everyone.
                   That's why we offer a <b>15-Day No-Questions-Asked Return Policy</b>.
                 </p>
                 <div className="p-6 rounded-2xl bg-accent-primary/5 border border-accent-primary/20">

@@ -1,19 +1,19 @@
 export const STRIPE_PLANS = {
   plus: {
     name: 'Axiom Plus',
-    priceId: 'price_1TUbF7GSON2VmEJyyJTltUI9',
+    priceId: 'price_1TVFcS2cUEp4LFlqXW3IOlFX',
     price: '$26.99',
     limit: 100,
   },
   pro: {
     name: 'Axiom Pro',
-    priceId: 'price_1TUbFVGSON2VmEJyCKKutXSc',
+    priceId: 'price_1TVFcR2cUEp4LFlqJ4nHnWnf',
     price: '$49.99',
     limit: -1,
   },
   elite: {
     name: 'Research Elite',
-    priceId: 'price_1TUbGIGSON2VmEJyyN6Z4JkB',
+    priceId: 'price_1TVFcT2cUEp4LFlqGl6Tba9h',
     price: '$69.99',
     limit: -1,
   },

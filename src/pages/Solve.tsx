@@ -15,62 +15,61 @@ import confetti from 'canvas-confetti';
 import { parseJSONResponse, isQuotaError } from '../lib/gemini';
 import { Link } from 'react-router-dom';
 import Groq from 'groq-sdk';
-
+ 
 const groq = new Groq({
   apiKey: import.meta.env.VITE_GROQ_API_KEY,
   dangerouslyAllowBrowser: true,
 });
-
+ 
 // ── AI MODEL DEFINITIONS ──────────────────────────────────────────────────────
+// All models verified live on Groq as of May 2026
 const AI_MODELS = [
   {
-    id: 'qwen-qwq-32b',
-    name: 'Qwen QwQ-32B',
+    id: 'llama-3.3-70b-versatile',
+    name: 'Llama 3.3 70B',
     badge: 'Best for Math',
-    description: 'Reasoning-focused model. Best accuracy for word problems & numericals.',
+    description: 'Fast & reliable. Great for algebra, geometry, and word problems.',
     badgeColor: 'bg-emerald-500',
     minPlan: 'free',
   },
   {
-    id: 'deepseek-r1-distill-llama-70b',
-    name: 'DeepSeek R1',
+    id: 'qwen/qwen3-32b',
+    name: 'Qwen3 32B',
     badge: 'Chain-of-Thought',
     description: 'Deep reasoning chains. Excellent for multi-step algebra & calculus.',
     badgeColor: 'bg-blue-500',
     minPlan: 'free',
   },
   {
-    id: 'llama-3.3-70b-versatile',
-    name: 'Llama 3.3 70B',
+    id: 'openai/gpt-oss-20b',
+    name: 'GPT-OSS 20B',
     badge: 'Versatile',
-    description: 'Fast & reliable. Great for geometry, statistics, and general math.',
+    description: 'OpenAI open-weight model. Fast and accurate for most math problems.',
     badgeColor: 'bg-purple-500',
     minPlan: 'pro',
   },
   {
-    // ✅ Replaced moonshotai/kimi-k1.5-8k (unavailable on Groq)
-    // with meta-llama/llama-4-maverick — verified available, best for graduate math
-    id: 'meta-llama/llama-4-maverick-17b-128e-instruct',
-    name: 'Llama 4 Maverick',
+    id: 'openai/gpt-oss-120b',
+    name: 'GPT-OSS 120B',
     badge: 'Elite Only',
-    description: 'Meta\'s frontier model. Research-level proofs and graduate mathematics.',
+    description: 'OpenAI flagship open-weight model. Research-level proofs and graduate math.',
     badgeColor: 'bg-amber-500',
     minPlan: 'elite',
   },
 ] as const;
-
+ 
 type ModelId = typeof AI_MODELS[number]['id'];
-
+ 
 const PLAN_MODEL_COUNT: Record<string, number> = {
   free: 2,
   plus: 2,
   pro: 3,
   elite: 4,
 };
-
+ 
 // ── MATH SYSTEM PROMPT ────────────────────────────────────────────────────────
 const buildMathPrompt = (problem: string): string => `You are AxiomAI, the world's most precise mathematical problem-solving AI. You MUST solve every problem with 100% numerical accuracy. Never approximate unless explicitly asked.
-
+ 
 CRITICAL ACCURACY RULES:
 - For word problems: extract ALL numerical values carefully before computing. Re-read the problem after extraction to verify you haven't missed any constraint.
 - For arithmetic/algebra: compute EXACT values. If the answer is a fraction, keep it as a fraction (e.g. 7/3 not 2.333...). If decimal is required, give full precision (e.g. 2.333... → 7/3 ≈ 2.3333).
@@ -78,11 +77,11 @@ CRITICAL ACCURACY RULES:
 - For geometry: include units in every step and the final answer.
 - NEVER skip steps. Each step must follow logically from the previous one with the formula shown.
 - Double-check your final answer by substituting back into the original equation/problem before responding.
-
+ 
 RESPONSE FORMAT — respond ONLY with valid JSON. No markdown, no code blocks, no text outside the JSON.
-
+ 
 Problem to solve: ${problem || 'Solve the math problem in the image'}
-
+ 
 Return this EXACT JSON structure:
 {
   "topic": "string (e.g. Quadratic Equations, Word Problems, Calculus)",
@@ -102,7 +101,7 @@ Return this EXACT JSON structure:
   "has_graph": false,
   "graph_function": ""
 }`;
-
+ 
 export default function Solve() {
   const { user, userPlan } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -111,20 +110,21 @@ export default function Solve() {
   const [showQuiz, setShowQuiz] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const [selectedModelId, setSelectedModelId] = useState<ModelId>('qwen-qwq-32b');
+  // ✅ Default model updated to llama-3.3-70b-versatile (verified live)
+  const [selectedModelId, setSelectedModelId] = useState<ModelId>('llama-3.3-70b-versatile');
   const [activeModelUsed, setActiveModelUsed] = useState<string>('');
   const abortRef = useRef<boolean>(false);
-
+ 
   const plan = userPlan?.plan ?? 'free';
   const unlockedCount = PLAN_MODEL_COUNT[plan] ?? 2;
-
+ 
   const isModelUnlocked = (model: typeof AI_MODELS[number]) => {
     const planOrder = ['free', 'plus', 'pro', 'elite'];
     return planOrder.indexOf(plan) >= planOrder.indexOf(model.minPlan);
   };
-
+ 
   const selectedModel = AI_MODELS.find(m => m.id === selectedModelId) ?? AI_MODELS[0];
-
+ 
   const handleSolve = async (problem: string, image?: File) => {
     const solveCount = parseInt(localStorage.getItem('axiom_solves_count') || '0');
     const limit = userPlan?.solveLimit ?? 5;
@@ -132,19 +132,19 @@ export default function Solve() {
       setShowLimitModal(true);
       return;
     }
-
+ 
     setIsLoading(true);
     abortRef.current = false;
     setResult(null);
     setShowChat(false);
     setShowQuiz(false);
     setActiveModelUsed(selectedModel.name);
-
+ 
     try {
       const prompt = buildMathPrompt(problem);
-
+ 
       if (abortRef.current) return;
-
+ 
       const response = await groq.chat.completions.create({
         model: selectedModelId,
         messages: [
@@ -158,27 +158,27 @@ export default function Solve() {
         temperature: 0.1,
         max_tokens: 4096,
       });
-
+ 
       if (abortRef.current) {
         toast.info('Generation stopped.');
         return;
       }
-
+ 
       const text = response.choices[0]?.message?.content;
       if (!text) throw new Error('The AI returned an empty response.');
-
+ 
       const data: SolveResult = parseJSONResponse(text);
       setResult(data);
-
+ 
       localStorage.setItem('axiom_solves_count', (solveCount + 1).toString());
-
+ 
       confetti({
         particleCount: 150,
         spread: 70,
         origin: { y: 0.6 },
         colors: ['#06B6D4', '#818CF8', '#ffffff'],
       });
-
+ 
       if (user) {
         addDoc(collection(db, 'solves'), {
           ...data,
@@ -189,17 +189,17 @@ export default function Solve() {
           isStarred: false,
         }).catch(err => console.error('Failed to save solve:', err));
       }
-
+ 
       toast.success(`Solved with ${selectedModel.name}!`);
     } catch (error: any) {
       if (abortRef.current) return;
       console.error('Math Solve Error:', error);
-
+ 
       const isModelError =
         error?.status === 404 ||
         (error?.message || '').toLowerCase().includes('model') ||
         (error?.message || '').toLowerCase().includes('not found');
-
+ 
       toast.error(
         isQuotaError(error)
           ? 'AI service is at capacity. Try switching to a different model.'
@@ -211,13 +211,13 @@ export default function Solve() {
       setIsLoading(false);
     }
   };
-
+ 
   const handleStop = () => {
     abortRef.current = true;
     setIsLoading(false);
     toast.info('Generation stopped.');
   };
-
+ 
   const handleExportPDF = () => {
     if (!result) return;
     const content = `
@@ -226,23 +226,23 @@ AXIOM AI - Math Solution
 Topic: ${result.topic} | ${result.subtopic}
 Difficulty: ${result.difficulty}
 Model: ${activeModelUsed}
-
+ 
 FINAL ANSWER:
 ${result.final_answer}
-
+ 
 PROBLEM SUMMARY:
 ${result.problem_summary}
-
+ 
 STEP-BY-STEP SOLUTION:
 ${result.steps.map(s => `
 Step ${s.step_number}: ${s.title}
 ${s.plain_english}
 Formula: ${s.latex}
 `).join('\n')}
-
+ 
 Generated by AxiomAI - axiom-math-ai.netlify.app
     `.trim();
-
+ 
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -252,17 +252,17 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
     URL.revokeObjectURL(url);
     toast.success('Solution exported!');
   };
-
+ 
   const solveCount = parseInt(localStorage.getItem('axiom_solves_count') || '0');
   const limit = userPlan?.solveLimit ?? 5;
   const isUnlimited = limit === -1;
   const planName = userPlan?.plan
     ? userPlan.plan.charAt(0).toUpperCase() + userPlan.plan.slice(1)
     : 'Free';
-
+ 
   return (
     <div className="min-h-screen pt-24 pb-12 px-4 max-w-5xl mx-auto">
-
+ 
       {/* Limit Modal */}
       <AnimatePresence>
         {showLimitModal && (
@@ -309,7 +309,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
           </motion.div>
         )}
       </AnimatePresence>
-
+ 
       <AnimatePresence mode="wait">
         {!result ? (
           <motion.div
@@ -328,7 +328,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
             <p className="text-text-secondary text-center mb-4 max-w-lg">
               Upload a photo or type your problem. AxiomAI provides step-by-step solutions for any math topic.
             </p>
-
+ 
             {(userPlan?.plan === 'pro' || userPlan?.plan === 'elite') && (
               <Link
                 to="/study"
@@ -342,7 +342,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                 <ArrowRight size={14} className="ml-auto text-text-muted" />
               </Link>
             )}
-
+ 
             <div className="mb-6 flex items-center gap-2 px-4 py-2 rounded-full bg-secondary border border-border text-xs font-bold">
               <div className={`w-2 h-2 rounded-full ${isUnlimited || solveCount < limit ? 'bg-emerald-400' : 'bg-red-400'}`} />
               {isUnlimited
@@ -350,7 +350,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                 : <span className="text-text-muted">{solveCount}/{limit} solves used · <Link to="/pricing" className="text-accent-primary hover:underline">Upgrade</Link></span>
               }
             </div>
-
+ 
             {/* ── AI MODEL SELECTOR ─────────────────────────────── */}
             <div className="mb-6 w-full max-w-lg relative">
               <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-2 flex items-center gap-1.5">
@@ -360,7 +360,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                   {unlockedCount} of {AI_MODELS.length} unlocked
                 </span>
               </p>
-
+ 
               <button
                 onClick={() => setShowModelDropdown(v => !v)}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-card border border-border hover:border-accent-primary/40 transition-all text-left group"
@@ -379,7 +379,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                   className={`text-text-muted transition-transform flex-shrink-0 ${showModelDropdown ? 'rotate-180' : ''}`}
                 />
               </button>
-
+ 
               <AnimatePresence>
                 {showModelDropdown && (
                   <motion.div
@@ -392,7 +392,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                     {AI_MODELS.map((model, i) => {
                       const unlocked = isModelUnlocked(model);
                       const isSelected = model.id === selectedModelId;
-
+ 
                       return (
                         <button
                           key={model.id}
@@ -434,7 +434,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                         </button>
                       );
                     })}
-
+ 
                     {plan !== 'elite' && (
                       <div className="px-4 py-2.5 bg-accent-primary/5 border-t border-border flex items-center justify-between">
                         <span className="text-[10px] text-text-muted">
@@ -454,9 +454,9 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
               </AnimatePresence>
             </div>
             {/* ── END MODEL SELECTOR ────────────────────────────── */}
-
+ 
             <SolveInput id="solve-input" onSolve={handleSolve} isLoading={isLoading} />
-
+ 
             {isLoading && (
               <button
                 onClick={handleStop}
@@ -466,7 +466,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                 Stop Generation
               </button>
             )}
-
+ 
             <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
               {[
                 { icon: <Sparkles className="text-accent-primary" />, title: 'Smart Steps', desc: 'Clear, logical breakdowns of every problem.' },
@@ -495,7 +495,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
               <div className="rotate-180"><ArrowRight size={18} /></div>
               <span className="text-xs font-bold uppercase tracking-widest">Solve another</span>
             </button>
-
+ 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="md:col-span-2 bento-card border-accent-primary/20 bg-gradient-to-br from-card to-secondary">
                 <div className="flex items-center justify-between mb-8">
@@ -530,14 +530,14 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                     </button>
                   </div>
                 </div>
-
+ 
                 <div className="mb-10 text-center">
                   <p className="text-[10px] text-text-muted mb-4 font-bold uppercase tracking-[0.2em]">Final Answer</p>
                   <div className="text-4xl font-bold text-white overflow-x-auto py-4 font-mono">
                     <BlockMath math={result.final_answer_latex} />
                   </div>
                 </div>
-
+ 
                 <div className="space-y-6">
                   <h2 className="text-sm font-bold uppercase tracking-widest text-text-muted border-b border-border pb-4 flex items-center gap-2">
                     <Sparkles size={14} className="text-accent-primary" />
@@ -546,7 +546,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                   <StepDisplay steps={result.steps} />
                 </div>
               </div>
-
+ 
               <div className="space-y-6">
                 <button
                   onClick={() => setShowChat(true)}
@@ -560,7 +560,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                     <p className="text-xs text-text-secondary">Talk to our tutor about this problem</p>
                   </div>
                 </button>
-
+ 
                 <button
                   onClick={() => setShowQuiz(true)}
                   className="w-full bento-card bg-accent-secondary/5 border-accent-secondary/20 flex items-center gap-4 hover:scale-[1.02] active:scale-[0.98] transition-all text-left group"
@@ -573,7 +573,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                     <p className="text-xs text-text-secondary">Test your knowledge on this topic</p>
                   </div>
                 </button>
-
+ 
                 <div className="bento-card">
                   <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-4">Mastery Insight</h3>
                   <p className="text-sm text-text-secondary leading-relaxed italic">"{result.problem_summary}"</p>
@@ -599,7 +599,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
           </motion.div>
         )}
       </AnimatePresence>
-
+ 
       <AnimatePresence>
         {showChat && result && <ProfessorChat solveContext={result} onClose={() => setShowChat(false)} />}
       </AnimatePresence>

@@ -25,17 +25,17 @@ export const AI_MODELS: AIModel[] = [
     minPlan: "free",
     color: "text-cyan-400",
     desc: "Math-specialized · Chain-of-thought reasoning",
-    apiModel: "deepseek/deepseek-r1-0528:free",   // ✅ verified free May 2026
+    apiModel: "deepseek/deepseek-r1:free",         // ✅ verified free May 2026
   },
   {
     id: "gemini-2.0-flash",
-    name: "Gemini Flash (free)",
+    name: "Llama 4 Maverick",
     provider: "openrouter",
     badge: "FREE",
     minPlan: "free",
     color: "text-blue-400",
-    desc: "Google AI · Strong on word problems",
-    apiModel: "google/gemma-4-26b-a4b:free",       // ✅ verified free May 2026
+    desc: "Meta AI · 128K context · Strong on word problems",
+    apiModel: "meta-llama/llama-4-maverick:free",  // ✅ verified free May 2026
   },
   {
     id: "mistral-large-latest",
@@ -128,36 +128,47 @@ async function callOpenRouter(apiModel: string, userPrompt: string): Promise<str
   const key = import.meta.env.VITE_OPENROUTER_API_KEY;
   if (!key) throw new Error("VITE_OPENROUTER_API_KEY is not configured in Netlify environment variables.");
 
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${key}`,
-      "HTTP-Referer": "https://www.axiomai.website",
-      "X-Title": "AxiomAI",
-    },
-    body: JSON.stringify({
-      model: apiModel,
-      messages: [
-        { role: "system", content: MATH_SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0,
-      max_tokens: 4000,
-    }),
-  });
+  // Try primary model first, then fall back to a reliable free model
+  const modelsToTry = [apiModel, "meta-llama/llama-4-scout:free"];
+  let lastError: any;
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(
-      `OpenRouter error ${res.status}: ${err?.error?.message || res.statusText}`
-    );
+  for (const model of modelsToTry) {
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${key}`,
+          "HTTP-Referer": "https://www.axiomai.website",
+          "X-Title": "AxiomAI",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: MATH_SYSTEM_PROMPT },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0,
+          max_tokens: 4000,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(`OpenRouter error ${res.status}: ${err?.error?.message || res.statusText}`);
+      }
+
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content;
+      if (!text) throw new Error("OpenRouter returned an empty response.");
+      return text.trim();
+    } catch (e) {
+      lastError = e;
+      console.warn(`Model ${model} failed, trying fallback...`, e);
+    }
   }
 
-  const data = await res.json();
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error("OpenRouter returned an empty response.");
-  return text.trim();
+  throw lastError;
 }
 
 async function callMistral(userPrompt: string): Promise<string> {

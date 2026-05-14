@@ -3,12 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Brain, ArrowRight, CheckCircle2, XCircle, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseJSONResponse, isQuotaError } from '../lib/gemini';
-import Groq from 'groq-sdk';
 
-const groq = new Groq({
-  apiKey: import.meta.env.VITE_GROQ_API_KEY,
-  dangerouslyAllowBrowser: true,
-});
+const DEEPSEEK_API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY;
 
 interface Question {
   id: number;
@@ -54,25 +50,35 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
           ]
         }`;
 
-        const response = await groq.chat.completions.create({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a math quiz generator. Always respond with valid JSON only, no markdown, no extra text.',
-            },
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
+        const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "deepseek-reasoner",
+            messages: [
+              {
+                role: "system",
+                content: "You are a math quiz generator. Always respond with valid JSON only, no markdown, no extra text.",
+              },
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+            temperature: 0,
+            max_tokens: 2000,
+          }),
         });
 
-        const text = response.choices[0]?.message?.content;
+        const data = await res.json();
+        const text = data.choices?.[0]?.message?.content;
         if (!text) throw new Error('Failed to generate quiz');
 
-        const data = parseJSONResponse(text);
-        setQuiz(data);
+        const parsed = parseJSONResponse(text);
+        setQuiz(parsed);
       } catch (err) {
         console.error('Quiz Generation Error:', err);
         if (isQuotaError(err)) {

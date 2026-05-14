@@ -1,6 +1,6 @@
 // ─── src/lib/ai.ts ───────────────────────────────────────────────────────────
 // Full multi-provider AI library for AXIOM-AI
-// Free models via OpenRouter (no billing needed)
+// Free models via OpenRouter — verified slugs May 2026
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type Plan = "free" | "plus" | "pro" | "research";
@@ -25,17 +25,17 @@ export const AI_MODELS: AIModel[] = [
     minPlan: "free",
     color: "text-cyan-400",
     desc: "Math-specialized · Chain-of-thought reasoning",
-    apiModel: "deepseek/deepseek-r1-0528:free",
+    apiModel: "deepseek/deepseek-r1-0528:free",   // ✅ verified free May 2026
   },
   {
     id: "gemini-2.0-flash",
-    name: "Gemini 2.0 Flash",
+    name: "Gemini Flash (free)",
     provider: "openrouter",
     badge: "FREE",
     minPlan: "free",
     color: "text-blue-400",
     desc: "Google AI · Strong on word problems",
-    apiModel: "google/gemini-2.0-flash-001:free",
+    apiModel: "google/gemma-4-26b-a4b:free",       // ✅ verified free May 2026
   },
   {
     id: "mistral-large-latest",
@@ -58,7 +58,7 @@ export const AI_MODELS: AIModel[] = [
     apiModel: "gpt-4o",
   },
   {
-    id: "claude-opus-4-5",
+    id: "claude-opus",
     name: "Claude Opus",
     provider: "anthropic",
     badge: "ELITE",

@@ -6,12 +6,8 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { isQuotaError } from '../lib/gemini';
-import Groq from 'groq-sdk';
 
-const groq = new Groq({
-  apiKey: import.meta.env.VITE_GROQ_API_KEY,
-  dangerouslyAllowBrowser: true,
-});
+const DEEPSEEK_API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY;
 
 interface Message {
   role: 'user' | 'assistant';
@@ -55,19 +51,26 @@ export default function ProfessorChat({ solveContext, onClose }: ProfessorChatPr
       2. Be encouraging but rigorous.
       3. Use the Socratic method: guide the student rather than just giving the answer if they ask for one.`;
 
-      const response = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: systemInstruction },
-          ...messages.map(m => ({
-            role: m.role as 'user' | 'assistant',
-            content: m.content,
-          })),
-          { role: 'user', content: userMessage.content },
-        ],
+      const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "deepseek-reasoner",
+          messages: [
+            { role: "system", content: systemInstruction },
+            ...messages.map(m => ({ role: m.role, content: m.content })),
+            { role: "user", content: userMessage.content },
+          ],
+          temperature: 0,
+          max_tokens: 2000,
+        }),
       });
 
-      const reply = response.choices[0]?.message?.content;
+      const data = await res.json();
+      const reply = data.choices?.[0]?.message?.content;
       if (!reply) throw new Error('Failed to chat');
 
       setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
@@ -114,10 +117,7 @@ export default function ProfessorChat({ solveContext, onClose }: ProfessorChatPr
                 : 'bg-elevated text-text-primary rounded-tl-none border border-border'
             }`}>
               <div className="markdown-body">
-                <ReactMarkdown
-                  remarkPlugins={[remarkMath]}
-                  rehypePlugins={[rehypeKatex]}
-                >
+                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                   {m.content}
                 </ReactMarkdown>
               </div>

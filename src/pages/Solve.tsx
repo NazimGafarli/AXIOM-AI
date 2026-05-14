@@ -1,6 +1,11 @@
-import { useState, useRef } from 'react';
+// ─── src/pages/Solve.tsx ─────────────────────────────────────────────────────
+// Full replacement — wires all 5 AI models with plan-gated dropdown selector
+// ─────────────────────────────────────────────────────────────────────────────
 import { motion, AnimatePresence } from 'motion/react';
-import { Sigma, Sparkles, History, ArrowRight, Share2, Star, GraduationCap, Brain, Download, Square, ChevronDown, Lock, Cpu } from 'lucide-react';
+import {
+  Sigma, Sparkles, History, ArrowRight, Share2, Star,
+  GraduationCap, Brain, Download, Square, ChevronDown, Lock,
+} from 'lucide-react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
@@ -12,258 +17,183 @@ import { BlockMath } from 'react-katex';
 import { SolveResult } from '../types';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
-import { parseJSONResponse, isQuotaError } from '../lib/gemini';
 import { Link } from 'react-router-dom';
-import Groq from 'groq-sdk';
- 
-const groq = new Groq({
-  apiKey: import.meta.env.VITE_GROQ_API_KEY,
-  dangerouslyAllowBrowser: true,
-});
- 
-// ── AI MODEL DEFINITIONS ──────────────────────────────────────────────────────
-// All models verified live on Groq as of May 2026
-const AI_MODELS = [
-  {
-    id: 'llama-3.3-70b-versatile',
-    name: 'Llama 3.3 70B',
-    badge: 'Best for Math',
-    description: 'Fast & reliable. Great for algebra, geometry, and word problems.',
-    badgeColor: 'bg-emerald-500',
-    minPlan: 'free',
-  },
-  {
-    id: 'qwen/qwen3-32b',
-    name: 'Qwen3 32B',
-    badge: 'Chain-of-Thought',
-    description: 'Deep reasoning chains. Excellent for multi-step algebra & calculus.',
-    badgeColor: 'bg-blue-500',
-    minPlan: 'free',
-  },
-  {
-    id: 'openai/gpt-oss-20b',
-    name: 'GPT-OSS 20B',
-    badge: 'Versatile',
-    description: 'OpenAI open-weight model. Fast and accurate for most math problems.',
-    badgeColor: 'bg-purple-500',
-    minPlan: 'pro',
-  },
-  {
-    id: 'openai/gpt-oss-120b',
-    name: 'GPT-OSS 120B',
-    badge: 'Elite Only',
-    description: 'OpenAI flagship open-weight model. Research-level proofs and graduate math.',
-    badgeColor: 'bg-amber-500',
-    minPlan: 'elite',
-  },
-] as const;
- 
-type ModelId = typeof AI_MODELS[number]['id'];
- 
-const PLAN_MODEL_COUNT: Record<string, number> = {
-  free: 2,
-  plus: 2,
-  pro: 3,
-  elite: 4,
-};
- 
-// ── MATH SYSTEM PROMPT ────────────────────────────────────────────────────────
-const buildMathPrompt = (problem: string): string => `You are AxiomAI, the world's most precise mathematical problem-solving AI. You MUST solve every problem with 100% numerical accuracy. Never approximate unless explicitly asked.
- 
-CRITICAL ACCURACY RULES:
-- For word problems: extract ALL numerical values carefully before computing. Re-read the problem after extraction to verify you haven't missed any constraint.
-- For arithmetic/algebra: compute EXACT values. If the answer is a fraction, keep it as a fraction (e.g. 7/3 not 2.333...). If decimal is required, give full precision (e.g. 2.333... → 7/3 ≈ 2.3333).
-- For equations/parabolas: show vertex form, standard form, roots, and axis of symmetry where applicable.
-- For geometry: include units in every step and the final answer.
-- NEVER skip steps. Each step must follow logically from the previous one with the formula shown.
-- Double-check your final answer by substituting back into the original equation/problem before responding.
- 
-RESPONSE FORMAT — respond ONLY with valid JSON. No markdown, no code blocks, no text outside the JSON.
- 
-Problem to solve: ${problem || 'Solve the math problem in the image'}
- 
-Return this EXACT JSON structure:
-{
-  "topic": "string (e.g. Quadratic Equations, Word Problems, Calculus)",
-  "subtopic": "string (e.g. Parabolas, Rate Problems, Integration)",
-  "difficulty": "Elementary" | "Medium" | "Hard" | "Expert",
-  "final_answer": "string (human-readable, e.g. x = 3 or Area = 24 cm²)",
-  "final_answer_latex": "string (valid LaTeX, e.g. x = 3 or A = 24\\\\text{ cm}^2)",
-  "problem_summary": "string (1-2 sentence explanation of what this problem teaches)",
-  "steps": [
-    {
-      "step_number": 1,
-      "title": "string (short step name)",
-      "latex": "string (the formula/calculation in LaTeX with escaped backslashes)",
-      "plain_english": "string (clear explanation a student can follow)"
-    }
-  ],
-  "has_graph": false,
-  "graph_function": ""
-}`;
- 
+
+// Import from new ai.ts
+import {
+  AI_MODELS,
+  PLAN_RANK,
+  callAI,
+  parseJSONResponse,
+  isQuotaError,
+  isAuthError,
+  getErrorMessage,
+} from '../lib/ai';
+
+// ─── Math prompt builder ──────────────────────────────────────────────────────
+function buildMathPrompt(problem: string): string {
+  return `Solve the following mathematics problem completely and accurately.
+
+Problem: ${problem}
+
+Remember:
+- Return ONLY valid JSON matching the exact schema in your system prompt.
+- No markdown, no backticks, no extra commentary outside the JSON.
+- Show every algebraic/calculus/arithmetic step.
+- Decimals must be precise to 4+ decimal places.
+- Use proper escaped LaTeX for all expressions.`;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function Solve() {
   const { user, userPlan } = useAuth();
+
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<SolveResult | null>(null);
   const [showChat, setShowChat] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
-  // ✅ Default model updated to llama-3.3-70b-versatile (verified live)
-  const [selectedModelId, setSelectedModelId] = useState<ModelId>('llama-3.3-70b-versatile');
-  const [activeModelUsed, setActiveModelUsed] = useState<string>('');
+  const [selectedModelId, setSelectedModelId] = useState('deepseek-r1');
+
   const abortRef = useRef<boolean>(false);
- 
-  const plan = userPlan?.plan ?? 'free';
-  const unlockedCount = PLAN_MODEL_COUNT[plan] ?? 2;
- 
-  const isModelUnlocked = (model: typeof AI_MODELS[number]) => {
-    const planOrder = ['free', 'plus', 'pro', 'elite'];
-    return planOrder.indexOf(plan) >= planOrder.indexOf(model.minPlan);
-  };
- 
-  const selectedModel = AI_MODELS.find(m => m.id === selectedModelId) ?? AI_MODELS[0];
- 
-  const handleSolve = async (problem: string, image?: File) => {
-    const solveCount = parseInt(localStorage.getItem('axiom_solves_count') || '0');
-    const limit = userPlan?.solveLimit ?? 5;
+
+  const currentPlan: string = userPlan?.plan || 'free';
+  const currentPlanRank = PLAN_RANK[currentPlan] ?? 0;
+  const selectedModel = AI_MODELS.find((m) => m.id === selectedModelId) || AI_MODELS[0];
+
+  const solveCount = parseInt(localStorage.getItem('axiom_solves_count') || '0');
+  const limit: number = userPlan?.solveLimit ?? 5;
+  const isUnlimited = limit === -1;
+  const planName = userPlan?.plan
+    ? userPlan.plan.charAt(0).toUpperCase() + userPlan.plan.slice(1)
+    : 'Free';
+
+  // ─── Solve handler ──────────────────────────────────────────────────────────
+  const handleSolve = async (problem: string, _image?: File) => {
     if (limit !== -1 && solveCount >= limit) {
       setShowLimitModal(true);
       return;
     }
- 
+
+    if (!problem.trim()) {
+      toast.error('Please enter a math problem.');
+      return;
+    }
+
     setIsLoading(true);
     abortRef.current = false;
     setResult(null);
     setShowChat(false);
     setShowQuiz(false);
-    setActiveModelUsed(selectedModel.name);
- 
+
     try {
       const prompt = buildMathPrompt(problem);
- 
+
       if (abortRef.current) return;
- 
-      const response = await groq.chat.completions.create({
-        model: selectedModelId,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a world-class math solver. Always respond with ONLY a valid JSON object — no markdown, no code fences, no preamble. Your numerical answers must be 100% correct. Double-check every calculation before responding.',
-          },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.1,
-        max_tokens: 4096,
-      });
- 
+
+      const rawText = await callAI(selectedModel.id, prompt);
+
       if (abortRef.current) {
         toast.info('Generation stopped.');
         return;
       }
- 
-      const text = response.choices[0]?.message?.content;
-      if (!text) throw new Error('The AI returned an empty response.');
- 
-      const data: SolveResult = parseJSONResponse(text);
+
+      if (!rawText) throw new Error('The AI returned an empty response. Please try again.');
+
+      const data: SolveResult = parseJSONResponse(rawText);
+
       setResult(data);
- 
-      localStorage.setItem('axiom_solves_count', (solveCount + 1).toString());
- 
+      localStorage.setItem('axiom_solves_count', String(solveCount + 1));
+
       confetti({
         particleCount: 150,
         spread: 70,
         origin: { y: 0.6 },
         colors: ['#06B6D4', '#818CF8', '#ffffff'],
       });
- 
+
       if (user) {
         addDoc(collection(db, 'solves'), {
           ...data,
           userId: user.uid,
-          modelUsed: selectedModelId,
+          aiModel: selectedModel.name,
+          aiProvider: selectedModel.provider,
           createdAt: serverTimestamp(),
           isPublic: false,
           isStarred: false,
-        }).catch(err => console.error('Failed to save solve:', err));
+        }).catch((err) => console.error('[AxiomAI] Failed to save solve:', err));
       }
- 
+
       toast.success(`Solved with ${selectedModel.name}!`);
     } catch (error: any) {
       if (abortRef.current) return;
-      console.error('Math Solve Error:', error);
- 
-      const isModelError =
-        error?.status === 404 ||
-        (error?.message || '').toLowerCase().includes('model') ||
-        (error?.message || '').toLowerCase().includes('not found');
- 
-      toast.error(
-        isQuotaError(error)
-          ? 'AI service is at capacity. Try switching to a different model.'
-          : isModelError
-          ? `Model unavailable. Try switching AI model.`
-          : error.message || 'An error occurred.'
-      );
+      console.error('[AxiomAI] Solve error:', error);
+
+      if (isQuotaError(error)) {
+        toast.error(`${selectedModel.name} is at capacity. Try a different AI model.`);
+      } else if (isAuthError(error)) {
+        toast.error(
+          `${selectedModel.name} API key is missing or invalid. ` +
+          'Add it in Netlify → Project configuration → Environment variables.'
+        );
+      } else {
+        toast.error(getErrorMessage(error, selectedModel.name));
+      }
     } finally {
       setIsLoading(false);
     }
   };
- 
+
   const handleStop = () => {
     abortRef.current = true;
     setIsLoading(false);
     toast.info('Generation stopped.');
   };
- 
-  const handleExportPDF = () => {
+
+  const handleExport = () => {
     if (!result) return;
-    const content = `
-AXIOM AI - Math Solution
-========================
-Topic: ${result.topic} | ${result.subtopic}
-Difficulty: ${result.difficulty}
-Model: ${activeModelUsed}
- 
-FINAL ANSWER:
-${result.final_answer}
- 
-PROBLEM SUMMARY:
-${result.problem_summary}
- 
-STEP-BY-STEP SOLUTION:
-${result.steps.map(s => `
-Step ${s.step_number}: ${s.title}
-${s.plain_english}
-Formula: ${s.latex}
-`).join('\n')}
- 
-Generated by AxiomAI - axiom-math-ai.netlify.app
-    `.trim();
- 
+    const content = [
+      'AXIOM AI — Math Solution',
+      '════════════════════════',
+      `Topic:      ${result.topic} › ${result.subtopic}`,
+      `Difficulty: ${result.difficulty}`,
+      `AI Model:   ${selectedModel.name} (${selectedModel.provider})`,
+      '',
+      'FINAL ANSWER',
+      '────────────',
+      result.final_answer,
+      '',
+      'SUMMARY',
+      '────────',
+      result.problem_summary,
+      '',
+      'STEP-BY-STEP SOLUTION',
+      '──────────────────────',
+      ...result.steps.map(
+        (s) =>
+          `Step ${s.step_number}: ${s.title}\n${s.plain_english}\nFormula: ${s.latex}\n`
+      ),
+      '',
+      'Generated by AxiomAI · axiom-math-ai.netlify.app',
+    ].join('\n');
+
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `axiom-solution-${result.topic.replace(/\s+/g, '-').toLowerCase()}.txt`;
+    a.download = `axiom-${result.topic.replace(/\s+/g, '-').toLowerCase()}.txt`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('Solution exported!');
   };
- 
-  const solveCount = parseInt(localStorage.getItem('axiom_solves_count') || '0');
-  const limit = userPlan?.solveLimit ?? 5;
-  const isUnlimited = limit === -1;
-  const planName = userPlan?.plan
-    ? userPlan.plan.charAt(0).toUpperCase() + userPlan.plan.slice(1)
-    : 'Free';
- 
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen pt-24 pb-12 px-4 max-w-5xl mx-auto">
- 
-      {/* Limit Modal */}
+
+      {/* ── Limit Modal ── */}
       <AnimatePresence>
         {showLimitModal && (
           <motion.div
@@ -287,8 +217,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
               <p className="text-text-secondary mb-8">
                 {userPlan?.isPro
                   ? `You've used all ${limit} solves on your ${planName} plan this month.`
-                  : `You've used all 5 free solves. Upgrade to Axiom Plus for 100 solves/month or Pro for unlimited access.`
-                }
+                  : `You've used all 5 free solves. Upgrade to Axiom Plus for 100 solves/month, or Pro for unlimited access.`}
               </p>
               <div className="flex flex-col gap-3">
                 <Link
@@ -309,9 +238,11 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
           </motion.div>
         )}
       </AnimatePresence>
- 
+
+      {/* ── Main Content ── */}
       <AnimatePresence mode="wait">
         {!result ? (
+          /* ── Input Screen ── */
           <motion.div
             key="input"
             initial={{ opacity: 0, y: 20 }}
@@ -319,6 +250,7 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
             exit={{ opacity: 0, y: -20 }}
             className="flex flex-col items-center"
           >
+            {/* Header */}
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center mb-6 shadow-glow">
               <Sigma className="text-white" size={36} />
             </div>
@@ -326,10 +258,11 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
               What are we solving today?
             </h1>
             <p className="text-text-secondary text-center mb-4 max-w-lg">
-              Upload a photo or type your problem. AxiomAI provides step-by-step solutions for any math topic.
+              Upload a photo or type your problem. AxiomAI provides accurate, step-by-step solutions for any math topic.
             </p>
- 
-            {(userPlan?.plan === 'pro' || userPlan?.plan === 'elite') && (
+
+            {/* Study Session CTA (Pro+) */}
+            {(currentPlan === 'pro' || currentPlan === 'research' || currentPlan === 'elite') && (
               <Link
                 to="/study"
                 className="mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-accent-primary/8 border border-accent-primary/20 hover:bg-accent-primary/12 transition-all"
@@ -342,121 +275,108 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                 <ArrowRight size={14} className="ml-auto text-text-muted" />
               </Link>
             )}
- 
-            <div className="mb-6 flex items-center gap-2 px-4 py-2 rounded-full bg-secondary border border-border text-xs font-bold">
+
+            {/* Solve counter badge */}
+            <div className="mb-4 flex items-center gap-2 px-4 py-2 rounded-full bg-secondary border border-border text-xs font-bold">
               <div className={`w-2 h-2 rounded-full ${isUnlimited || solveCount < limit ? 'bg-emerald-400' : 'bg-red-400'}`} />
               {isUnlimited
                 ? <span className="text-text-muted">Unlimited solves · <span className="text-accent-primary">{planName} plan</span></span>
                 : <span className="text-text-muted">{solveCount}/{limit} solves used · <Link to="/pricing" className="text-accent-primary hover:underline">Upgrade</Link></span>
               }
             </div>
- 
-            {/* ── AI MODEL SELECTOR ─────────────────────────────── */}
-            <div className="mb-6 w-full max-w-lg relative">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-2 flex items-center gap-1.5">
-                <Cpu size={11} />
-                Select AI Model
-                <span className="ml-auto text-[10px] font-normal text-text-muted normal-case tracking-normal">
-                  {unlockedCount} of {AI_MODELS.length} unlocked
-                </span>
-              </p>
- 
+
+            {/* ── AI Model Dropdown ── */}
+            <div className="relative mb-6 w-full max-w-lg">
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-widest mb-2">
+                AI Model
+              </label>
               <button
-                onClick={() => setShowModelDropdown(v => !v)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-card border border-border hover:border-accent-primary/40 transition-all text-left group"
+                onClick={() => setShowModelDropdown((v) => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-card border border-border hover:border-accent-primary/50 transition-all"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm">{selectedModel.name}</span>
-                    <span className={`px-2 py-0.5 rounded-md text-white text-[9px] font-bold uppercase tracking-wide ${selectedModel.badgeColor}`}>
-                      {selectedModel.badge}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-text-muted mt-0.5 truncate">{selectedModel.description}</p>
+                <div className="flex items-center gap-3">
+                  <span className={`text-sm font-bold ${selectedModel.color}`}>
+                    {selectedModel.name}
+                  </span>
+                  <span className="text-xs text-text-muted">{selectedModel.desc}</span>
                 </div>
                 <ChevronDown
                   size={16}
-                  className={`text-text-muted transition-transform flex-shrink-0 ${showModelDropdown ? 'rotate-180' : ''}`}
+                  className={`text-text-muted transition-transform ${showModelDropdown ? 'rotate-180' : ''}`}
                 />
               </button>
- 
+
               <AnimatePresence>
                 {showModelDropdown && (
                   <motion.div
-                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -8, scale: 0.98 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute top-full mt-2 left-0 right-0 z-40 bg-card border border-border rounded-2xl overflow-hidden shadow-2xl"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="absolute top-full mt-2 w-full bg-card border border-border rounded-xl overflow-hidden z-30 shadow-2xl"
                   >
-                    {AI_MODELS.map((model, i) => {
-                      const unlocked = isModelUnlocked(model);
-                      const isSelected = model.id === selectedModelId;
- 
+                    {AI_MODELS.map((model) => {
+                      const locked = PLAN_RANK[model.minPlan] > currentPlanRank;
+                      const isSelected = selectedModelId === model.id;
                       return (
                         <button
                           key={model.id}
-                          disabled={!unlocked}
+                          disabled={locked}
                           onClick={() => {
-                            if (unlocked) {
-                              setSelectedModelId(model.id as ModelId);
+                            if (!locked) {
+                              setSelectedModelId(model.id);
                               setShowModelDropdown(false);
                             }
                           }}
-                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all
-                            ${i > 0 ? 'border-t border-border' : ''}
-                            ${unlocked ? 'hover:bg-elevated cursor-pointer' : 'opacity-50 cursor-not-allowed'}
-                            ${isSelected ? 'bg-accent-primary/8' : ''}
-                          `}
+                          className={[
+                            'w-full flex items-center justify-between px-4 py-3 transition-all text-left',
+                            isSelected ? 'bg-accent-primary/10' : '',
+                            locked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-elevated cursor-pointer',
+                          ].join(' ')}
                         >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className={`font-bold text-sm ${isSelected ? 'text-accent-primary' : ''}`}>
-                                {model.name}
-                              </span>
-                              <span className={`px-2 py-0.5 rounded-md text-white text-[9px] font-bold uppercase tracking-wide ${model.badgeColor}`}>
-                                {model.badge}
-                              </span>
-                              {isSelected && (
-                                <span className="ml-auto text-[9px] font-bold text-accent-primary uppercase tracking-wider">Active</span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-text-muted mt-0.5">{model.description}</p>
+                          <div className="flex items-center gap-3">
+                            <span className={`text-sm font-bold ${model.color}`}>{model.name}</span>
+                            <span className="text-xs text-text-muted">{model.desc}</span>
                           </div>
-                          {!unlocked && (
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              <Lock size={12} className="text-text-muted" />
-                              <span className="text-[10px] text-text-muted font-bold capitalize">
-                                {model.minPlan}+
+                          <div className="flex items-center gap-2">
+                            {locked ? (
+                              <>
+                                <Lock size={12} className="text-text-muted" />
+                                <span className="text-[10px] font-bold text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded-full">
+                                  {model.badge}
+                                </span>
+                              </>
+                            ) : (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                model.badge === 'FREE'
+                                  ? 'text-emerald-400 bg-emerald-400/10'
+                                  : 'text-yellow-400 bg-yellow-400/10'
+                              }`}>
+                                {isSelected ? '✓ ' : ''}{model.badge}
                               </span>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </button>
                       );
                     })}
- 
-                    {plan !== 'elite' && (
-                      <div className="px-4 py-2.5 bg-accent-primary/5 border-t border-border flex items-center justify-between">
-                        <span className="text-[10px] text-text-muted">
-                          Unlock all {AI_MODELS.length} models with Elite
-                        </span>
-                        <Link
-                          to="/pricing"
-                          onClick={() => setShowModelDropdown(false)}
-                          className="text-[10px] font-bold text-accent-primary hover:underline"
-                        >
-                          Upgrade →
-                        </Link>
-                      </div>
-                    )}
+
+                    <div className="px-4 py-2 border-t border-border bg-elevated/50">
+                      <Link
+                        to="/pricing"
+                        onClick={() => setShowModelDropdown(false)}
+                        className="text-xs text-accent-primary hover:underline"
+                      >
+                        Unlock all 5 AI models → View plans
+                      </Link>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
-            {/* ── END MODEL SELECTOR ────────────────────────────── */}
- 
+
+            {/* Problem Input */}
             <SolveInput id="solve-input" onSolve={handleSolve} isLoading={isLoading} />
- 
+
+            {/* Stop button */}
             {isLoading && (
               <button
                 onClick={handleStop}
@@ -466,22 +386,24 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                 Stop Generation
               </button>
             )}
- 
+
+            {/* Feature cards */}
             <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl">
               {[
                 { icon: <Sparkles className="text-accent-primary" />, title: 'Smart Steps', desc: 'Clear, logical breakdowns of every problem.' },
                 { icon: <History className="text-accent-secondary" />, title: 'Auto-History', desc: 'Never lose a solution again with cloud sync.' },
                 { icon: <Sigma className="text-warning" />, title: 'Any Topic', desc: 'From basics to advanced university research.' },
-              ].map((feature, i) => (
+              ].map((f, i) => (
                 <div key={i} className="p-6 rounded-2xl bg-card border border-border">
-                  <div className="mb-4">{feature.icon}</div>
-                  <h3 className="font-bold mb-2">{feature.title}</h3>
-                  <p className="text-sm text-text-muted leading-relaxed">{feature.desc}</p>
+                  <div className="mb-4">{f.icon}</div>
+                  <h3 className="font-bold mb-2">{f.title}</h3>
+                  <p className="text-sm text-text-muted leading-relaxed">{f.desc}</p>
                 </div>
               ))}
             </div>
           </motion.div>
         ) : (
+          /* ── Result Screen ── */
           <motion.div
             key="result"
             initial={{ opacity: 0, y: 20 }}
@@ -495,9 +417,11 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
               <div className="rotate-180"><ArrowRight size={18} /></div>
               <span className="text-xs font-bold uppercase tracking-widest">Solve another</span>
             </button>
- 
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* ── Left: Solution card ── */}
               <div className="md:col-span-2 bento-card border-accent-primary/20 bg-gradient-to-br from-card to-secondary">
+                {/* Tags row */}
                 <div className="flex items-center justify-between mb-8">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="px-3 py-1 rounded-md bg-accent-primary text-white text-[10px] font-bold uppercase tracking-wider shadow-glow">
@@ -506,16 +430,13 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                     <span className="px-3 py-1 rounded-md bg-elevated text-text-muted text-[10px] font-bold uppercase tracking-wider">
                       {result.difficulty}
                     </span>
-                    {activeModelUsed && (
-                      <span className="flex items-center gap-1 px-3 py-1 rounded-md bg-elevated border border-border text-text-muted text-[10px] font-bold">
-                        <Cpu size={9} />
-                        {activeModelUsed}
-                      </span>
-                    )}
+                    <span className={`px-3 py-1 rounded-md bg-elevated text-[10px] font-bold uppercase tracking-wider ${selectedModel.color}`}>
+                      {selectedModel.name}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={handleExportPDF}
+                      onClick={handleExport}
                       className="flex items-center gap-1 p-2 rounded-lg hover:bg-elevated text-text-muted hover:text-accent-primary transition-all text-xs font-bold"
                       title="Export Solution"
                     >
@@ -530,14 +451,16 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                     </button>
                   </div>
                 </div>
- 
+
+                {/* Final answer */}
                 <div className="mb-10 text-center">
                   <p className="text-[10px] text-text-muted mb-4 font-bold uppercase tracking-[0.2em]">Final Answer</p>
-                  <div className="text-4xl font-bold text-white overflow-x-auto py-4 font-mono">
+                  <div className="text-4xl font-bold text-white overflow-x-auto py-4">
                     <BlockMath math={result.final_answer_latex} />
                   </div>
                 </div>
- 
+
+                {/* Steps */}
                 <div className="space-y-6">
                   <h2 className="text-sm font-bold uppercase tracking-widest text-text-muted border-b border-border pb-4 flex items-center gap-2">
                     <Sparkles size={14} className="text-accent-primary" />
@@ -546,11 +469,12 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                   <StepDisplay steps={result.steps} />
                 </div>
               </div>
- 
+
+              {/* ── Right: Sidebar ── */}
               <div className="space-y-6">
                 <button
                   onClick={() => setShowChat(true)}
-                  className="w-full bento-card bg-accent-primary/5 border-accent-primary/20 flex items-center gap-4 hover:scale-[1.02] active:scale-[0.98] transition-all text-left group"
+                  className="w-full bento-card bg-accent-primary/5 border-accent-primary/20 flex items-center gap-4 hover:scale-[1.02] active:scale-[0.98] transition-all text-left"
                 >
                   <div className="w-12 h-12 rounded-xl bg-accent-primary text-white flex items-center justify-center shadow-glow">
                     <GraduationCap size={24} />
@@ -560,10 +484,10 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                     <p className="text-xs text-text-secondary">Talk to our tutor about this problem</p>
                   </div>
                 </button>
- 
+
                 <button
                   onClick={() => setShowQuiz(true)}
-                  className="w-full bento-card bg-accent-secondary/5 border-accent-secondary/20 flex items-center gap-4 hover:scale-[1.02] active:scale-[0.98] transition-all text-left group"
+                  className="w-full bento-card bg-accent-secondary/5 border-accent-secondary/20 flex items-center gap-4 hover:scale-[1.02] active:scale-[0.98] transition-all text-left"
                 >
                   <div className="w-12 h-12 rounded-xl bg-accent-secondary text-white flex items-center justify-center shadow-glow">
                     <Brain size={24} />
@@ -573,25 +497,27 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
                     <p className="text-xs text-text-secondary">Test your knowledge on this topic</p>
                   </div>
                 </button>
- 
+
                 <div className="bento-card">
                   <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-4">Mastery Insight</h3>
                   <p className="text-sm text-text-secondary leading-relaxed italic">"{result.problem_summary}"</p>
                   <div className="mt-6 space-y-3 border-t border-border pt-4">
                     <div className="flex justify-between text-xs">
+                      <span className="text-text-muted">Subtopic</span>
+                      <span className="font-bold">{result.subtopic}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
                       <span className="text-text-muted">Complexity</span>
                       <span className="font-bold">{result.difficulty}</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-text-muted">Confidence</span>
-                      <span className="font-bold text-emerald-400">100% Verified</span>
+                      <span className="text-text-muted">AI Model</span>
+                      <span className={`font-bold ${selectedModel.color}`}>{selectedModel.name}</span>
                     </div>
-                    {activeModelUsed && (
-                      <div className="flex justify-between text-xs">
-                        <span className="text-text-muted">Model</span>
-                        <span className="font-bold text-accent-primary">{activeModelUsed}</span>
-                      </div>
-                    )}
+                    <div className="flex justify-between text-xs">
+                      <span className="text-text-muted">Confidence</span>
+                      <span className="font-bold text-emerald-400">Verified ✓</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -599,12 +525,17 @@ Generated by AxiomAI - axiom-math-ai.netlify.app
           </motion.div>
         )}
       </AnimatePresence>
- 
+
+      {/* ── Modals ── */}
       <AnimatePresence>
-        {showChat && result && <ProfessorChat solveContext={result} onClose={() => setShowChat(false)} />}
+        {showChat && result && (
+          <ProfessorChat solveContext={result} onClose={() => setShowChat(false)} />
+        )}
       </AnimatePresence>
       <AnimatePresence>
-        {showQuiz && result && <QuizPortal topic={result.topic} onClose={() => setShowQuiz(false)} />}
+        {showQuiz && result && (
+          <QuizPortal topic={result.topic} onClose={() => setShowQuiz(false)} />
+        )}
       </AnimatePresence>
     </div>
   );

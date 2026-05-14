@@ -2,99 +2,120 @@ import { useState, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Microscope, FileText, Fingerprint, FlaskConical as Flask, Send, Loader2, Sparkles, Binary, Beaker } from 'lucide-react';
 import { isQuotaError } from '../lib/gemini';
-import { BlockMath } from 'react-katex';
 import { toast } from 'sonner';
-import Groq from 'groq-sdk';
 
-const groq = new Groq({
-  apiKey: import.meta.env.VITE_GROQ_API_KEY,
-  dangerouslyAllowBrowser: true,
-});
+// ─── DeepSeek caller (no SDK needed — plain fetch) ────────────────────────────
+async function callDeepSeek(systemPrompt: string, userPrompt: string): Promise<string> {
+  const key = import.meta.env.VITE_DEEPSEEK_API_KEY;
+  if (!key) throw new Error("VITE_DEEPSEEK_API_KEY is not configured.");
+
+  const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: "deepseek-reasoner",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0,
+      max_tokens: 4000,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`DeepSeek API error ${res.status}: ${err?.error?.message || res.statusText}`);
+  }
+
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("DeepSeek returned an empty response.");
+  return text.trim();
+}
 
 export default function ResearchLab() {
   const [activeTab, setActiveTab] = useState<'analyzer' | 'fingerprint' | 'lab'>('analyzer');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ─── Paper Analyzer ─────────────────────────────────────────────────────────
   const analyzePaper = async (file: File) => {
     setLoading(true);
     setResult(null);
     try {
       const reader = new FileReader();
-      const textPromise = new Promise<string>((resolve) => {
+      const fileText = await new Promise<string>((resolve) => {
         reader.onloadend = () => resolve(reader.result as string);
         reader.readAsText(file);
       });
-      const fileText = await textPromise;
 
-      const prompt = `Analyze this mathematical research document content.
-      Identify:
-      1. Core Theorem/Hypothesis
-      2. Methodology used
-      3. Key mathematical breakthroughs
-      4. Theoretical dependencies (what other theories it builds on)
-      Provide a concise, high-level summary for a fast-reading researcher.
-      Respond in Markdown.
-      
-      Document content:
-      ${fileText.slice(0, 8000)}`;
+      const userPrompt = `Analyze this mathematical research document.
+Identify:
+1. Core Theorem / Hypothesis
+2. Methodology used
+3. Key mathematical breakthroughs
+4. Theoretical dependencies (what other theories it builds on)
 
-      const response = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: 'You are an expert mathematical research analyst.' },
-          { role: 'user', content: prompt },
-        ],
-      });
+Provide a concise, high-level summary for a fast-reading researcher.
+Respond in clear Markdown with LaTeX for all formulas.
 
-      const text = response.choices[0]?.message?.content;
-      if (!text) throw new Error("Empty response from AI");
+Document content:
+${fileText.slice(0, 8000)}`;
+
+      const text = await callDeepSeek(
+        'You are an expert mathematical research analyst. Provide precise, structured analysis.',
+        userPrompt
+      );
+
       setResult(text);
     } catch (err: any) {
       console.error("Research Lab Error:", err);
-      if (isQuotaError(err)) {
-        toast.error("The research engine is currently at capacity. Please try again later.");
-      } else {
-        toast.error("Analysis failed. Ensure file is a valid text-based document.");
-      }
+      toast.error(
+        isQuotaError(err)
+          ? "The research engine is at capacity. Please try again later."
+          : err.message || "Analysis failed. Ensure the file is a valid text-based document."
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  // ─── Structural Fingerprint ─────────────────────────────────────────────────
   const getFingerprint = async () => {
     if (!input.trim()) return;
     setLoading(true);
     setResult(null);
     try {
-      const prompt = `Analyze the mathematical structure of this expression: "${input}".
-      Identify its "Structural Fingerprint":
-      - Field of Study (e.g. Topology, Number Theory)
-      - Complexity Class
-      - Deep Theoretical Connections (identify similar famous theorems or structures)
-      - Symmetries and Invariants.
-      Respond in a structured research summary format. Use LaTeX for formulas.`;
+      const userPrompt = `Analyze the mathematical structure of this expression: "${input}"
 
-      const response = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: 'You are an expert mathematician specializing in structural analysis.' },
-          { role: 'user', content: prompt },
-        ],
-      });
+Identify its "Structural Fingerprint":
+- Field of Study (e.g. Topology, Number Theory, Analysis)
+- Complexity Class
+- Deep Theoretical Connections (identify similar famous theorems or structures)
+- Symmetries and Invariants
+- Known applications or open problems related to this structure
 
-      const text = response.choices[0]?.message?.content;
-      if (!text) throw new Error("Empty response from AI");
+Respond in a structured research summary format. Use LaTeX for all formulas.`;
+
+      const text = await callDeepSeek(
+        'You are an expert mathematician specializing in structural analysis and mathematical theory.',
+        userPrompt
+      );
+
       setResult(text);
     } catch (err: any) {
       console.error("Fingerprint Error:", err);
-      if (isQuotaError(err)) {
-        toast.error("Fingerprint engine busy. Try again later.");
-      } else {
-        toast.error("Fingerprinting failed.");
-      }
+      toast.error(
+        isQuotaError(err)
+          ? "Fingerprint engine busy. Try again later."
+          : err.message || "Fingerprinting failed."
+      );
     } finally {
       setLoading(false);
     }
@@ -103,6 +124,8 @@ export default function ResearchLab() {
   return (
     <div className="min-h-screen pt-32 pb-20 px-6">
       <div className="max-w-7xl mx-auto">
+
+        {/* ── Header ── */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
           <div>
             <div className="flex items-center gap-3 mb-4">
@@ -116,17 +139,20 @@ export default function ResearchLab() {
             </p>
           </div>
 
+          {/* ── Tab switcher ── */}
           <div className="flex p-1 bg-secondary rounded-xl border border-border">
             {[
-              { id: 'analyzer', icon: <FileText size={16} />, label: 'Paper Analysis' },
+              { id: 'analyzer',    icon: <FileText size={16} />,    label: 'Paper Analysis' },
               { id: 'fingerprint', icon: <Fingerprint size={16} />, label: 'Fingerprinting' },
-              { id: 'lab', icon: <Beaker size={16} />, label: 'Workbench' },
+              { id: 'lab',         icon: <Beaker size={16} />,      label: 'Workbench' },
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => { setActiveTab(tab.id as any); setResult(null); setInput(''); }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
-                  activeTab === tab.id ? 'bg-accent-primary text-white shadow-glow' : 'text-text-muted hover:text-text-primary'
+                  activeTab === tab.id
+                    ? 'bg-accent-primary text-white shadow-glow'
+                    : 'text-text-muted hover:text-text-primary'
                 }`}
               >
                 {tab.icon}
@@ -136,8 +162,12 @@ export default function ResearchLab() {
           </div>
         </div>
 
+        {/* ── Main grid ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+          {/* ── Left panel ── */}
           <div className="lg:col-span-1 space-y-6">
+
             {activeTab === 'analyzer' && (
               <div className="bento-card border-accent-primary/20 bg-accent-primary/5">
                 <h3 className="text-sm font-bold mb-4">Upload Research Paper</h3>
@@ -152,6 +182,7 @@ export default function ResearchLab() {
                     <Send size={24} className="-rotate-45" />
                   </div>
                   <span className="text-xs font-bold text-text-muted">Drop file here or click to browse</span>
+                  <span className="text-[10px] text-text-muted opacity-60">Supports .txt · .md · .tex</span>
                 </button>
                 <input
                   type="file"
@@ -169,30 +200,51 @@ export default function ResearchLab() {
                 <textarea
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  placeholder="Enter a formula (e.g. e^{i\pi} + 1 = 0)"
+                  placeholder={`Enter a formula or expression\ne.g. e^{i\\pi} + 1 = 0`}
                   className="w-full h-32 bg-secondary border border-border rounded-xl p-4 text-sm font-mono focus:border-accent-primary outline-none transition-all resize-none mb-4"
                 />
                 <button
                   onClick={getFingerprint}
                   disabled={loading || !input.trim()}
-                  className="w-full py-4 rounded-xl bg-accent-primary text-white font-bold text-sm shadow-glow hover:opacity-90 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-4 rounded-xl bg-accent-primary text-white font-bold text-sm shadow-glow hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? <Loader2 size={20} className="animate-spin" /> : <Fingerprint size={20} />}
                   <span>Generate Structural Fingerprint</span>
                 </button>
               </div>
             )}
+
+            {activeTab === 'lab' && (
+              <div className="bento-card border-accent-secondary/20 bg-accent-secondary/5">
+                <h3 className="text-sm font-bold mb-4">Workbench</h3>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  The experimental workbench is coming soon. This will support LaTeX live preview, symbolic computation, and multi-step proof building.
+                </p>
+                <div className="mt-6 py-8 flex flex-col items-center gap-3 opacity-40">
+                  <Beaker size={40} />
+                  <span className="text-xs font-bold">Coming Soon</span>
+                </div>
+              </div>
+            )}
           </div>
 
+          {/* ── Right panel: output ── */}
           <div className="lg:col-span-2">
             <div className="bento-card min-h-[500px] flex flex-col bg-gradient-to-br from-bg-card to-bg-secondary border-accent-primary/10">
               <div className="flex justify-between items-center mb-8 pb-4 border-b border-border">
                 <div className="flex items-center gap-2">
                   <Sparkles size={16} className="text-accent-primary" />
-                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">Analytical Output</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">
+                    Analytical Output · DeepSeek R1
+                  </span>
                 </div>
                 {result && (
-                  <button onClick={() => setResult(null)} className="text-[10px] font-bold text-accent-primary hover:underline">Clear Result</button>
+                  <button
+                    onClick={() => setResult(null)}
+                    className="text-[10px] font-bold text-accent-primary hover:underline"
+                  >
+                    Clear Result
+                  </button>
                 )}
               </div>
 
@@ -202,8 +254,8 @@ export default function ResearchLab() {
                     <Loader2 size={48} className="animate-spin text-accent-primary" />
                     <Binary size={20} className="absolute inset-0 m-auto text-white" />
                   </div>
-                  <p className="text-lg font-bold tracking-tight">Processing through Elite Reasoning Engine...</p>
-                  <p className="text-xs text-text-muted animate-pulse">Running field-specific analysis & symmetry checks</p>
+                  <p className="text-lg font-bold tracking-tight">Processing through DeepSeek R1 Reasoning Engine...</p>
+                  <p className="text-xs text-text-muted animate-pulse">Running chain-of-thought analysis · may take 15–30 seconds</p>
                 </div>
               ) : result ? (
                 <motion.div

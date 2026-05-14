@@ -1,50 +1,41 @@
 // ─── src/lib/ai.ts ───────────────────────────────────────────────────────────
 // Full multi-provider AI library for AXIOM-AI
-// Supports: DeepSeek, Gemini, Mistral, OpenAI, Anthropic
+// Free models via OpenRouter (no billing needed)
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ─── Plan & Model Types ──────────────────────────────────────────────────────
 
 export type Plan = "free" | "plus" | "pro" | "research";
 
 export interface AIModel {
   id: string;
   name: string;
-  provider: "deepseek" | "gemini" | "mistral" | "openai" | "anthropic";
+  provider: "openrouter" | "mistral" | "openai" | "anthropic";
   badge: "FREE" | "PLUS" | "PRO" | "ELITE";
   minPlan: Plan;
   color: string;
   desc: string;
-  /** Internal model string sent to the API */
   apiModel: string;
 }
-
-// ─── Tier layout ──────────────────────────────────────────────────────────────
-// FREE     → DeepSeek R1 + Gemini 2.0 Flash        (2 models)
-// PLUS     → + Mistral Large                        (3 models)
-// PRO      → + GPT-4o                               (4 models)
-// ELITE    → + Claude Opus (all 5)                  (5 models)
 
 export const AI_MODELS: AIModel[] = [
   {
     id: "deepseek-r1",
     name: "DeepSeek R1",
-    provider: "deepseek",
+    provider: "openrouter",
     badge: "FREE",
     minPlan: "free",
     color: "text-cyan-400",
     desc: "Math-specialized · Chain-of-thought reasoning",
-    apiModel: "deepseek-reasoner",
+    apiModel: "deepseek/deepseek-r1:free",
   },
   {
     id: "gemini-2.0-flash",
     name: "Gemini 2.0 Flash",
-    provider: "gemini",
+    provider: "openrouter",
     badge: "FREE",
     minPlan: "free",
     color: "text-blue-400",
     desc: "Google AI · Strong on word problems",
-    apiModel: "gemini-2.0-flash",
+    apiModel: "google/gemini-2.0-flash-exp:free",
   },
   {
     id: "mistral-large-latest",
@@ -96,7 +87,6 @@ export function isModelLocked(model: AIModel, plan: Plan | string): boolean {
 }
 
 // ─── Math System Prompt ──────────────────────────────────────────────────────
-// This prompt is injected into EVERY model to ensure precise, step-by-step answers.
 
 export const MATH_SYSTEM_PROMPT = `You are AxiomAI, the world's most advanced mathematics tutor and problem-solving engine.
 
@@ -134,82 +124,40 @@ JSON SCHEMA (return EXACTLY this structure, no extra keys):
 
 // ─── Per-Provider Callers ─────────────────────────────────────────────────────
 
-// DeepSeek uses an OpenAI-compatible API endpoint.
-// DeepSeek R1 is a reasoning model purpose-built for math & science —
-// it outperforms most models on MATH, AIME, and GSM8K benchmarks.
-async function callDeepSeek(apiModel: string, userPrompt: string): Promise<string> {
-  const key = import.meta.env.VITE_DEEPSEEK_API_KEY;
-  if (!key) throw new Error("VITE_DEEPSEEK_API_KEY is not configured in Netlify environment variables.");
+// FREE: DeepSeek R1 + Gemini 2.0 Flash via OpenRouter (no billing)
+async function callOpenRouter(apiModel: string, userPrompt: string): Promise<string> {
+  const key = import.meta.env.VITE_OPENROUTER_API_KEY;
+  if (!key) throw new Error("VITE_OPENROUTER_API_KEY is not configured in Netlify environment variables.");
 
-  const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
+      "Authorization": `Bearer ${key}`,
+      "HTTP-Referer": "https://www.axiomai.website",
+      "X-Title": "AxiomAI",
     },
     body: JSON.stringify({
-      model: apiModel, // "deepseek-reasoner"
+      model: apiModel,
       messages: [
         { role: "system", content: MATH_SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0,        // 0 = deterministic, maximum precision
+      temperature: 0,
       max_tokens: 4000,
-      response_format: { type: "json_object" },
     }),
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(
-      `DeepSeek API error ${res.status}: ${err?.error?.message || res.statusText}`
+      `OpenRouter error ${res.status}: ${err?.error?.message || res.statusText}`
     );
   }
 
   const data = await res.json();
   const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error("DeepSeek returned an empty response.");
-  return text.trim();
-}
-
-async function callGemini(userPrompt: string): Promise<string> {
-  const key = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!key) throw new Error("VITE_GEMINI_API_KEY is not configured in Netlify environment variables.");
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: {
-          parts: [{ text: MATH_SYSTEM_PROMPT }],
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: userPrompt }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.05,
-          maxOutputTokens: 3000,
-          responseMimeType: "application/json",
-        },
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(
-      `Gemini API error ${res.status}: ${err?.error?.message || res.statusText}`
-    );
-  }
-
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Gemini returned an empty response.");
+  if (!text) throw new Error("OpenRouter returned an empty response.");
   return text.trim();
 }
 
@@ -237,9 +185,7 @@ async function callMistral(userPrompt: string): Promise<string> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(
-      `Mistral API error ${res.status}: ${err?.message || res.statusText}`
-    );
+    throw new Error(`Mistral API error ${res.status}: ${err?.message || res.statusText}`);
   }
 
   const data = await res.json();
@@ -272,9 +218,7 @@ async function callOpenAI(userPrompt: string): Promise<string> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(
-      `OpenAI API error ${res.status}: ${err?.error?.message || res.statusText}`
-    );
+    throw new Error(`OpenAI API error ${res.status}: ${err?.error?.message || res.statusText}`);
   }
 
   const data = await res.json();
@@ -305,9 +249,7 @@ async function callAnthropic(userPrompt: string): Promise<string> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(
-      `Anthropic API error ${res.status}: ${err?.error?.message || res.statusText}`
-    );
+    throw new Error(`Anthropic API error ${res.status}: ${err?.error?.message || res.statusText}`);
   }
 
   const data = await res.json();
@@ -318,19 +260,13 @@ async function callAnthropic(userPrompt: string): Promise<string> {
 
 // ─── Main Dispatcher ──────────────────────────────────────────────────────────
 
-/**
- * Call any AI model with a math problem.
- * Returns the raw JSON string from the model.
- */
 export async function callAI(modelId: string, userPrompt: string): Promise<string> {
   const model = AI_MODELS.find((m) => m.id === modelId);
   if (!model) throw new Error(`Unknown model id: "${modelId}"`);
 
   switch (model.provider) {
-    case "deepseek":
-      return callDeepSeek(model.apiModel, userPrompt);
-    case "gemini":
-      return callGemini(userPrompt);
+    case "openrouter":
+      return callOpenRouter(model.apiModel, userPrompt);
     case "mistral":
       return callMistral(userPrompt);
     case "openai":
@@ -338,77 +274,48 @@ export async function callAI(modelId: string, userPrompt: string): Promise<strin
     case "anthropic":
       return callAnthropic(userPrompt);
     default:
-      throw new Error(`Unknown provider: "${model.provider}"`);
+      throw new Error(`Unknown provider: "${(model as any).provider}"`);
   }
 }
 
 // ─── JSON Parser ──────────────────────────────────────────────────────────────
 
-/**
- * Safely extract and parse JSON from a model response.
- * Handles markdown code blocks, leading/trailing text, and common formatting issues.
- */
 export function parseJSONResponse(text: string): any {
   if (!text) throw new Error("Empty response from AI.");
 
-  // 1. Try raw parse first (ideal case — model returned clean JSON)
-  try {
-    return JSON.parse(text);
-  } catch (_) {
-    // Continue to cleaning steps
-  }
+  try { return JSON.parse(text); } catch (_) {}
 
-  // 2. Strip markdown fences: ```json ... ``` or ``` ... ```
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) {
-    try {
-      return JSON.parse(fenceMatch[1].trim());
-    } catch (_) {}
+    try { return JSON.parse(fenceMatch[1].trim()); } catch (_) {}
   }
 
-  // 3. Extract first { ... } block (handles preamble/postamble text)
   const firstBrace = text.indexOf("{");
   const lastBrace = text.lastIndexOf("}");
   if (firstBrace !== -1 && lastBrace > firstBrace) {
-    const jsonSlice = text.substring(firstBrace, lastBrace + 1);
-    try {
-      return JSON.parse(jsonSlice);
-    } catch (_) {}
+    try { return JSON.parse(text.substring(firstBrace, lastBrace + 1)); } catch (_) {}
   }
 
-  // 4. Last resort: remove control characters and try again
   const cleaned = text
-    .replace(/[\x00-\x1F\x7F]/g, " ") // remove control chars
-    .replace(/,\s*([}\]])/g, "$1")      // trailing commas
+    .replace(/[\x00-\x1F\x7F]/g, " ")
+    .replace(/,\s*([}\]])/g, "$1")
     .trim();
-
   const f = cleaned.indexOf("{");
   const l = cleaned.lastIndexOf("}");
   if (f !== -1 && l > f) {
-    try {
-      return JSON.parse(cleaned.substring(f, l + 1));
-    } catch (e) {
-      console.error("[AxiomAI] JSON parse failed after all attempts:", e);
-      console.error("[AxiomAI] Raw text:", text.substring(0, 500));
+    try { return JSON.parse(cleaned.substring(f, l + 1)); } catch (e) {
+      console.error("[AxiomAI] JSON parse failed:", e);
     }
   }
 
-  throw new Error(
-    "The AI returned a response that could not be parsed. Please try again or rephrase your problem."
-  );
+  throw new Error("The AI returned a response that could not be parsed. Please try again.");
 }
 
 // ─── Error Utilities ──────────────────────────────────────────────────────────
 
 export function isQuotaError(error: any): boolean {
   if (!error) return false;
-  const msg = (
-    error.message ||
-    error?.error?.message ||
-    String(error)
-  ).toLowerCase();
-  const status = String(error.status || error?.error?.status || "").toUpperCase();
-
+  const msg = (error.message || String(error)).toLowerCase();
   return (
     msg.includes("429") ||
     msg.includes("quota") ||
@@ -417,8 +324,8 @@ export function isQuotaError(error: any): boolean {
     msg.includes("at capacity") ||
     msg.includes("out of credits") ||
     msg.includes("too many requests") ||
-    status === "RESOURCE_EXHAUSTED" ||
-    status === "429"
+    msg.includes("402") ||
+    msg.includes("insufficient balance")
   );
 }
 
@@ -435,11 +342,7 @@ export function isAuthError(error: any): boolean {
 }
 
 export function getErrorMessage(error: any, modelName: string): string {
-  if (isQuotaError(error)) {
-    return `${modelName} is at capacity right now. Try a different AI model or wait a moment.`;
-  }
-  if (isAuthError(error)) {
-    return `${modelName} API key is missing or invalid. Check your Netlify environment variables.`;
-  }
+  if (isQuotaError(error)) return `${modelName} is at capacity. Try a different AI model.`;
+  if (isAuthError(error)) return `${modelName} API key is missing or invalid. Check your Netlify environment variables.`;
   return error?.message || `An unexpected error occurred with ${modelName}.`;
 }

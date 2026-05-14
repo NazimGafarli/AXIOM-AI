@@ -25,7 +25,7 @@ export const AI_MODELS: AIModel[] = [
     minPlan: "free",
     color: "text-cyan-400",
     desc: "Math-specialized · Chain-of-thought reasoning",
-    apiModel: "deepseek/deepseek-r1:free",
+    apiModel: "deepseek/deepseek-r1-0528:free",
   },
   {
     id: "gemini-2.0-flash",
@@ -35,7 +35,7 @@ export const AI_MODELS: AIModel[] = [
     minPlan: "free",
     color: "text-blue-400",
     desc: "Google AI · Strong on word problems",
-    apiModel: "google/gemini-2.0-flash-exp:free",
+    apiModel: "google/gemini-2.0-flash-001:free",
   },
   {
     id: "mistral-large-latest",
@@ -124,7 +124,6 @@ JSON SCHEMA (return EXACTLY this structure, no extra keys):
 
 // ─── Per-Provider Callers ─────────────────────────────────────────────────────
 
-// FREE: DeepSeek R1 + Gemini 2.0 Flash via OpenRouter (no billing)
 async function callOpenRouter(apiModel: string, userPrompt: string): Promise<string> {
   const key = import.meta.env.VITE_OPENROUTER_API_KEY;
   if (!key) throw new Error("VITE_OPENROUTER_API_KEY is not configured in Netlify environment variables.");

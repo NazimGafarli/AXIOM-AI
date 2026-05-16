@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, ArrowRight, CheckCircle2, XCircle, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { parseJSONResponse, isQuotaError } from '../lib/gemini';
-
-const DEEPSEEK_API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY;
+import { callAIQuiz, parseJSONResponse, isQuotaError } from '../lib/ai';
 
 interface Question {
   id: number;
@@ -36,53 +34,27 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
     const generateQuiz = async () => {
       try {
         const prompt = `Generate a 3-question math quiz on the topic of "${topic}" with "Medium" difficulty.
-        Respond ONLY with valid JSON in this exact format, no extra text:
-        {
-          "topic": "${topic}",
-          "questions": [
-            {
-              "id": 1,
-              "text": "string",
-              "options": ["string", "string", "string", "string"],
-              "correct_index": number,
-              "explanation": "string"
-            }
-          ]
-        }`;
+Respond ONLY with valid JSON in this exact format, no extra text:
+{
+  "topic": "${topic}",
+  "questions": [
+    {
+      "id": 1,
+      "text": "string",
+      "options": ["string", "string", "string", "string"],
+      "correct_index": 0,
+      "explanation": "string"
+    }
+  ]
+}`;
 
-        const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: "deepseek-reasoner",
-            messages: [
-              {
-                role: "system",
-                content: "You are a math quiz generator. Always respond with valid JSON only, no markdown, no extra text.",
-              },
-              {
-                role: "user",
-                content: prompt,
-              },
-            ],
-            temperature: 0,
-            max_tokens: 2000,
-          }),
-        });
-
-        const data = await res.json();
-        const text = data.choices?.[0]?.message?.content;
-        if (!text) throw new Error('Failed to generate quiz');
-
+        const text = await callAIQuiz(prompt);
         const parsed = parseJSONResponse(text);
         setQuiz(parsed);
       } catch (err) {
-        console.error('Quiz Generation Error:', err);
+        console.error('[QuizPortal]', err);
         if (isQuotaError(err)) {
-          toast.error('The quiz engine is currently busy. Try again later.');
+          toast.error('The quiz engine is busy. Try again later.');
         } else {
           toast.error('Could not generate quiz. Try again later.');
         }
@@ -98,13 +70,13 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
     if (selectedIdx !== null) return;
     setSelectedIdx(idx);
     if (idx === quiz!.questions[currentIdx].correct_index) {
-      setScore(prev => prev + 1);
+      setScore((prev) => prev + 1);
     }
   };
 
   const nextQuestion = () => {
     if (currentIdx < quiz!.questions.length - 1) {
-      setCurrentIdx(prev => prev + 1);
+      setCurrentIdx((prev) => prev + 1);
       setSelectedIdx(null);
     } else {
       setIsCompleted(true);
@@ -122,7 +94,11 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
           <motion.div
             className="h-full bg-accent-primary"
             initial={{ width: 0 }}
-            animate={{ width: quiz ? `${((currentIdx + (selectedIdx !== null ? 1 : 0)) / quiz.questions.length) * 100}%` : 0 }}
+            animate={{
+              width: quiz
+                ? `${((currentIdx + (selectedIdx !== null ? 1 : 0)) / quiz.questions.length) * 100}%`
+                : 0,
+            }}
           />
         </div>
 
@@ -137,19 +113,21 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
               <Sparkles className="text-accent-primary" size={40} />
             </div>
             <h2 className="text-3xl font-bold mb-2">Quiz Complete!</h2>
-            <p className="text-text-secondary mb-8">You scored {score} out of {quiz?.questions.length}</p>
-
+            <p className="text-text-secondary mb-8">
+              You scored {score} out of {quiz?.questions.length}
+            </p>
             <div className="grid grid-cols-2 gap-4 mb-8">
               <div className="p-4 rounded-2xl bg-secondary border border-border">
                 <span className="block text-xs text-text-muted font-bold uppercase mb-1">Accuracy</span>
-                <span className="text-2xl font-bold">{Math.round((score / quiz!.questions.length) * 100)}%</span>
+                <span className="text-2xl font-bold">
+                  {Math.round((score / quiz!.questions.length) * 100)}%
+                </span>
               </div>
               <div className="p-4 rounded-2xl bg-secondary border border-border">
                 <span className="block text-xs text-text-muted font-bold uppercase mb-1">XP Earned</span>
                 <span className="text-2xl font-bold">+{score * 20}</span>
               </div>
             </div>
-
             <button
               onClick={onClose}
               className="w-full py-4 rounded-2xl bg-accent-primary text-white font-bold hover:opacity-90 transition-all shadow-glow"
@@ -162,32 +140,40 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-2">
                 <Brain size={20} className="text-accent-primary" />
-                <span className="text-xs font-bold uppercase tracking-widest text-text-muted">Problem {currentIdx + 1} of {quiz?.questions.length}</span>
+                <span className="text-xs font-bold uppercase tracking-widest text-text-muted">
+                  Problem {currentIdx + 1} of {quiz?.questions.length}
+                </span>
               </div>
-              <button onClick={onClose} className="text-xs font-bold text-text-muted hover:text-white transition-colors">Abort</button>
+              <button
+                onClick={onClose}
+                className="text-xs font-bold text-text-muted hover:text-white transition-colors"
+              >
+                Abort
+              </button>
             </div>
 
-            <h3 className="text-xl font-bold mb-8 leading-tight">{quiz?.questions[currentIdx].text}</h3>
+            <h3 className="text-xl font-bold mb-8 leading-tight">
+              {quiz?.questions[currentIdx].text}
+            </h3>
 
             <div className="grid grid-cols-1 gap-3 mb-8">
               {quiz?.questions[currentIdx].options.map((option, i) => {
                 const isSelected = selectedIdx === i;
                 const isCorrect = i === quiz.questions[currentIdx].correct_index;
                 const showResult = selectedIdx !== null;
-
                 return (
                   <button
                     key={i}
                     onClick={() => handleSelect(i)}
                     disabled={showResult}
-                    className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between group ${
+                    className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between ${
                       !showResult
                         ? 'bg-secondary border-border hover:border-accent-primary hover:bg-elevated'
                         : isCorrect
-                          ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
-                          : isSelected
-                            ? 'bg-red-500/10 border-red-500 text-red-500'
-                            : 'bg-secondary border-border opacity-50'
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500'
+                        : isSelected
+                        ? 'bg-red-500/10 border-red-500 text-red-500'
+                        : 'bg-secondary border-border opacity-50'
                     }`}
                   >
                     <span className="font-medium">{option}</span>
@@ -207,13 +193,17 @@ export default function QuizPortal({ topic, onClose }: QuizPortalProps) {
                 >
                   <div className="p-4 rounded-2xl bg-accent-primary/5 border border-accent-primary/20">
                     <p className="text-xs font-bold text-accent-primary uppercase mb-1">Explanation</p>
-                    <p className="text-sm text-text-secondary leading-relaxed">{quiz.questions[currentIdx].explanation}</p>
+                    <p className="text-sm text-text-secondary leading-relaxed">
+                      {quiz!.questions[currentIdx].explanation}
+                    </p>
                   </div>
                   <button
                     onClick={nextQuestion}
                     className="w-full py-4 rounded-2xl bg-white text-black font-bold flex items-center justify-center gap-2 hover:bg-zinc-200 transition-all"
                   >
-                    <span>{currentIdx === quiz.questions.length - 1 ? 'Finish Quiz' : 'Next Question'}</span>
+                    <span>
+                      {currentIdx === quiz!.questions.length - 1 ? 'Finish Quiz' : 'Next Question'}
+                    </span>
                     <ArrowRight size={20} />
                   </button>
                 </motion.div>

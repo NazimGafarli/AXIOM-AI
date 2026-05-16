@@ -15,12 +15,12 @@ export interface AIModel {
 export const AI_MODELS: AIModel[] = [
   {
     id: "deepseek-r1",
-    name: "DeepSeek R1",
+    name: "DeepSeek V3",
     badge: "FREE",
     minPlan: "free",
     color: "text-cyan-400",
     desc: "Chain-of-thought · Best for algebra & calculus",
-    apiModel: "deepseek/deepseek-r1-0528:free",
+    apiModel: "deepseek/deepseek-chat-v3-0324:free",
   },
   {
     id: "gemini-flash",
@@ -163,8 +163,8 @@ export async function callAI(modelId: string, userPrompt: string): Promise<strin
     return await callOpenRouter(model.apiModel, MATH_SYSTEM_PROMPT, userPrompt, 4000);
   } catch (e) {
     if (model.id === "deepseek-r1") throw e;
-    console.warn(`[AxiomAI] ${model.name} failed, falling back to DeepSeek R1:`, e);
-    return await callOpenRouter("deepseek/deepseek-r1-0528:free", MATH_SYSTEM_PROMPT, userPrompt, 4000);
+    console.warn(`[AxiomAI] ${model.name} failed, falling back to DeepSeek V3:`, e);
+    return await callOpenRouter("deepseek/deepseek-chat-v3-0324:free", MATH_SYSTEM_PROMPT, userPrompt, 4000);
   }
 }
 
@@ -186,7 +186,7 @@ export async function callAIChat(
       "X-Title": "AxiomAI",
     },
     body: JSON.stringify({
-      model: "deepseek/deepseek-r1-0528:free",
+      model: "deepseek/deepseek-chat-v3-0324:free",
       messages: [{ role: "system", content: systemPrompt }, ...messages],
       temperature: 0.3,
       max_tokens: 2000,

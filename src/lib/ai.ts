@@ -87,18 +87,19 @@ ABSOLUTE RULES — follow every single one:
 4. For word problems: extract all variables first (step 1), write the equation (step 2), then solve.
 5. Decimal answers: always give at least 4 decimal places unless the answer is a whole number or simple fraction.
 6. Fractions: prefer exact fractions over decimals when rational (e.g. \\\\frac{1}{3} not 0.3333).
-7. final_answer MUST be the simplest exact form (fraction, integer, or rounded 4 d.p. decimal).
+7. CRITICAL — final_answer and final_answer_latex MUST be copied EXACTLY from the result of your LAST step. Do NOT recalculate. Do NOT summarise. The top banner reads directly from this field — if it differs from your last step, the app shows the wrong answer.
 8. final_answer_latex MUST be valid KaTeX-renderable LaTeX.
 9. Minimum 3 steps, maximum 10 steps. Each step must advance the solution meaningfully.
 10. If the problem has no solution or is ill-defined, set final_answer to "No solution" and explain in steps.
+11. SELF-CHECK before writing the JSON: read your last step's result, then confirm final_answer matches it exactly. If they differ, correct final_answer before responding.
 
 JSON SCHEMA (return EXACTLY this structure):
 {
   "topic": "string",
   "subtopic": "string",
   "difficulty": "Elementary" | "Medium" | "Hard" | "Expert",
-  "final_answer": "string",
-  "final_answer_latex": "string",
+  "final_answer": "string — MUST match the last step result exactly",
+  "final_answer_latex": "string — LaTeX version of the same value",
   "problem_summary": "string",
   "steps": [
     {
@@ -223,7 +224,8 @@ export async function callAIQuiz(prompt: string): Promise<string> {
       messages: [
         {
           role: "system",
-          content: "You are a math quiz generator. Always respond with valid JSON only, no markdown, no extra text.",
+          content:
+            "You are a math quiz generator. Always respond with valid JSON only, no markdown, no extra text.",
         },
         { role: "user", content: prompt },
       ],

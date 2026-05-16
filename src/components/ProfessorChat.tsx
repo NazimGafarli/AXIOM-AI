@@ -5,9 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import { isQuotaError } from '../lib/gemini';
-
-const DEEPSEEK_API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY;
+import { callAIChat, isQuotaError, isAuthError } from '../lib/ai';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -21,7 +19,10 @@ interface ProfessorChatProps {
 
 export default function ProfessorChat({ solveContext, onClose }: ProfessorChatProps) {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: `Hello! I'm Professor Axiom. I see you just solved a problem about **${solveContext.topic}**. How can I help you master this topic today?` }
+    {
+      role: 'assistant',
+      content: `Hello! I'm Professor Axiom. I see you just solved a problem about **${solveContext.topic}**. How can I help you master this topic today?`,
+    },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -37,50 +38,34 @@ export default function ProfessorChat({ solveContext, onClose }: ProfessorChatPr
     if (!input.trim() || isLoading) return;
 
     const userMessage: Message = { role: 'user', content: input };
-    setMessages(prev => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
 
     try {
-      const systemInstruction = `You are Professor Axiom, an elite mathematics professor. 
-      You are helping a student understand a specific problem: ${solveContext?.problem_summary || "General math questions"}.
-      Previous answer was: ${solveContext?.final_answer || "N/A"}.
-      
-      Rules:
-      1. Use LaTeX for all math (wrap in $ or $$).
-      2. Be encouraging but rigorous.
-      3. Use the Socratic method: guide the student rather than just giving the answer if they ask for one.`;
+      const systemInstruction = `You are Professor Axiom, an elite mathematics professor.
+You are helping a student understand a specific problem: ${solveContext?.problem_summary || 'General math questions'}.
+The answer to their problem was: ${solveContext?.final_answer || 'N/A'}.
 
-      const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "deepseek-reasoner",
-          messages: [
-            { role: "system", content: systemInstruction },
-            ...messages.map(m => ({ role: m.role, content: m.content })),
-            { role: "user", content: userMessage.content },
-          ],
-          temperature: 0,
-          max_tokens: 2000,
-        }),
-      });
+Rules:
+1. Use LaTeX for all math (wrap in $ or $$).
+2. Be encouraging but rigorous.
+3. Use the Socratic method — guide the student, don't just give the answer.
+4. Keep responses concise and clear.`;
 
-      const data = await res.json();
-      const reply = data.choices?.[0]?.message?.content;
-      if (!reply) throw new Error('Failed to chat');
+      const reply = await callAIChat(
+        systemInstruction,
+        updatedMessages.map((m) => ({ role: m.role, content: m.content }))
+      );
 
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } catch (error: any) {
-      console.error(error);
-      const isQuota = isQuotaError(error);
-      const fallbackMsg = isQuota
-        ? "I'm a bit overwhelmed with students right now. Please try again in a moment!"
-        : "I'm sorry, I encountered an issue. Let me try that again.";
-      setMessages(prev => [...prev, { role: 'assistant', content: fallbackMsg }]);
+      console.error('[ProfessorChat]', error);
+      let fallback = "I'm sorry, I encountered an issue. Please try again.";
+      if (isQuotaError(error)) fallback = "I'm a bit overwhelmed right now. Try again in a moment!";
+      if (isAuthError(error)) fallback = "The AI service isn't configured. Please check your API key.";
+      setMessages((prev) => [...prev, { role: 'assistant', content: fallback }]);
     } finally {
       setIsLoading(false);
     }
@@ -111,11 +96,13 @@ export default function ProfessorChat({ solveContext, onClose }: ProfessorChatPr
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] p-4 rounded-2xl text-sm ${
-              m.role === 'user'
-                ? 'bg-accent-primary text-white rounded-tr-none shadow-glow'
-                : 'bg-elevated text-text-primary rounded-tl-none border border-border'
-            }`}>
+            <div
+              className={`max-w-[85%] p-4 rounded-2xl text-sm ${
+                m.role === 'user'
+                  ? 'bg-accent-primary text-white rounded-tr-none shadow-glow'
+                  : 'bg-elevated text-text-primary rounded-tl-none border border-border'
+              }`}
+            >
               <div className="markdown-body">
                 <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                   {m.content}
@@ -153,7 +140,7 @@ export default function ProfessorChat({ solveContext, onClose }: ProfessorChatPr
           </button>
         </div>
         <p className="text-[10px] text-center mt-3 text-text-muted font-medium">
-          Axiom plan: Unlimited Professor Chat messages.
+          Powered by DeepSeek R1 via OpenRouter
         </p>
       </div>
     </motion.div>

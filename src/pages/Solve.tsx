@@ -112,7 +112,6 @@ export default function Solve() {
           ...data,
           userId: user.uid,
           aiModel: selectedModel.name,
-          aiProvider: selectedModel.provider,
           createdAt: serverTimestamp(),
           isPublic: false,
           isStarred: false,
@@ -129,7 +128,7 @@ export default function Solve() {
       } else if (isAuthError(error)) {
         toast.error(
           `${selectedModel.name} API key is missing or invalid. ` +
-          'Add it in Netlify → Project configuration → Environment variables.'
+          'Add VITE_OPENROUTER_API_KEY in Netlify → Environment variables.'
         );
       } else {
         toast.error(getErrorMessage(error, selectedModel.name));
@@ -152,7 +151,7 @@ export default function Solve() {
       '════════════════════════',
       `Topic:      ${result.topic} › ${result.subtopic}`,
       `Difficulty: ${result.difficulty}`,
-      `AI Model:   ${selectedModel.name} (${selectedModel.provider})`,
+      `AI Model:   ${selectedModel.name}`,
       '',
       'FINAL ANSWER',
       '────────────',
@@ -252,8 +251,8 @@ export default function Solve() {
               Upload a photo or type your problem. AxiomAI provides accurate, step-by-step solutions for any math topic.
             </p>
 
-            {/* Study Session CTA (Pro+) */}
-            {(currentPlan === 'pro' || currentPlan === 'research' || currentPlan === 'elite') && (
+            {/* Study Session CTA (Pro+ only) */}
+            {(currentPlan === 'pro' || currentPlan === 'elite') && (
               <Link
                 to="/study"
                 className="mb-4 flex items-center gap-3 px-5 py-3 rounded-2xl bg-accent-primary/8 border border-accent-primary/20 hover:bg-accent-primary/12 transition-all"

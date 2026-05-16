@@ -21,7 +21,7 @@ async function callResearchAI(systemPrompt: string, userPrompt: string): Promise
       "X-Title": "AxiomAI",
     },
     body: JSON.stringify({
-      model: "deepseek/deepseek-r1-0528:free",
+      model: "openrouter/auto",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -240,7 +240,7 @@ Respond in a structured research summary format. Use LaTeX for all formulas.`;
                 <div className="flex items-center gap-2">
                   <Sparkles size={16} className="text-accent-primary" />
                   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">
-                    Analytical Output · DeepSeek R1 via OpenRouter
+                    Analytical Output · OpenRouter Auto
                   </span>
                 </div>
                 {result && (
@@ -260,7 +260,7 @@ Respond in a structured research summary format. Use LaTeX for all formulas.`;
                     <Binary size={20} className="absolute inset-0 m-auto text-white" />
                   </div>
                   <p className="text-lg font-bold tracking-tight">
-                    Processing through DeepSeek R1 Reasoning Engine...
+                    Processing through AI Reasoning Engine...
                   </p>
                   <p className="text-xs text-text-muted animate-pulse">
                     Running chain-of-thought analysis · may take 15–30 seconds

@@ -51,6 +51,7 @@ export default function Solve() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState('deepseek-r1');
+  const [solvedWithModel, setSolvedWithModel] = useState(AI_MODELS[0]);
 
   const abortRef = useRef<boolean>(false);
 
@@ -77,6 +78,9 @@ export default function Solve() {
       return;
     }
 
+    // Snapshot the model at call time so the banner always matches what ran
+    const solvedWith = selectedModel;
+
     setIsLoading(true);
     abortRef.current = false;
     setResult(null);
@@ -87,7 +91,7 @@ export default function Solve() {
       const prompt = buildMathPrompt(problem);
       if (abortRef.current) return;
 
-      const rawText = await callAI(selectedModel.id, prompt);
+      const rawText = await callAI(solvedWith.id, prompt);
 
       if (abortRef.current) {
         toast.info('Generation stopped.');
@@ -98,6 +102,7 @@ export default function Solve() {
 
       const data: SolveResult = parseJSONResponse(rawText);
       setResult(data);
+      setSolvedWithModel(solvedWith);
       localStorage.setItem('axiom_solves_count', String(solveCount + 1));
 
       confetti({
@@ -111,27 +116,27 @@ export default function Solve() {
         addDoc(collection(db, 'solves'), {
           ...data,
           userId: user.uid,
-          aiModel: selectedModel.name,
+          aiModel: solvedWith.name,
           createdAt: serverTimestamp(),
           isPublic: false,
           isStarred: false,
         }).catch((err) => console.error('[AxiomAI] Failed to save solve:', err));
       }
 
-      toast.success(`Solved with ${selectedModel.name}!`);
+      toast.success(`Solved with ${solvedWith.name}!`);
     } catch (error: any) {
       if (abortRef.current) return;
       console.error('[AxiomAI] Solve error:', error);
 
       if (isQuotaError(error)) {
-        toast.error(`${selectedModel.name} is at capacity. Try a different AI model.`);
+        toast.error(`${solvedWith.name} is at capacity. Try a different AI model.`);
       } else if (isAuthError(error)) {
         toast.error(
-          `${selectedModel.name} API key is missing or invalid. ` +
+          `${solvedWith.name} API key is missing or invalid. ` +
           'Add VITE_OPENROUTER_API_KEY in Netlify → Environment variables.'
         );
       } else {
-        toast.error(getErrorMessage(error, selectedModel.name));
+        toast.error(getErrorMessage(error, solvedWith.name));
       }
     } finally {
       setIsLoading(false);
@@ -151,7 +156,7 @@ export default function Solve() {
       '════════════════════════',
       `Topic:      ${result.topic} › ${result.subtopic}`,
       `Difficulty: ${result.difficulty}`,
-      `AI Model:   ${selectedModel.name}`,
+      `AI Model:   ${solvedWithModel.name}`,
       '',
       'FINAL ANSWER',
       '────────────',
@@ -418,8 +423,8 @@ export default function Solve() {
                     <span className="px-3 py-1 rounded-md bg-elevated text-text-muted text-[10px] font-bold uppercase tracking-wider">
                       {result.difficulty}
                     </span>
-                    <span className={`px-3 py-1 rounded-md bg-elevated text-[10px] font-bold uppercase tracking-wider ${selectedModel.color}`}>
-                      {selectedModel.name}
+                    <span className={`px-3 py-1 rounded-md bg-elevated text-[10px] font-bold uppercase tracking-wider ${solvedWithModel.color}`}>
+                      {solvedWithModel.name}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -500,7 +505,7 @@ export default function Solve() {
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-text-muted">AI Model</span>
-                      <span className={`font-bold ${selectedModel.color}`}>{selectedModel.name}</span>
+                      <span className={`font-bold ${solvedWithModel.color}`}>{solvedWithModel.name}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-text-muted">Confidence</span>

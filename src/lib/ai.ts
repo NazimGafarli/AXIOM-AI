@@ -1,6 +1,6 @@
 // src/lib/ai.ts — AxiomAI · single OpenRouter key, all 5 models
 
-export type Plan = "free" | "plus" | "pro" | "research";
+export type Plan = "free" | "plus" | "pro" | "elite";
 
 export interface AIModel {
   id: string;
@@ -20,7 +20,7 @@ export const AI_MODELS: AIModel[] = [
     minPlan: "free",
     color: "text-cyan-400",
     desc: "Chain-of-thought · Best for algebra & calculus",
-    apiModel: "deepseek/deepseek-chat-v3-0324:free",
+    apiModel: "openrouter/auto",
   },
   {
     id: "gemini-flash",
@@ -163,8 +163,8 @@ export async function callAI(modelId: string, userPrompt: string): Promise<strin
     return await callOpenRouter(model.apiModel, MATH_SYSTEM_PROMPT, userPrompt, 4000);
   } catch (e) {
     if (model.id === "deepseek-r1") throw e;
-    console.warn(`[AxiomAI] ${model.name} failed, falling back to DeepSeek V3:`, e);
-    return await callOpenRouter("deepseek/deepseek-chat-v3-0324:free", MATH_SYSTEM_PROMPT, userPrompt, 4000);
+    console.warn(`[AxiomAI] ${model.name} failed, falling back to auto:`, e);
+    return await callOpenRouter("openrouter/auto", MATH_SYSTEM_PROMPT, userPrompt, 4000);
   }
 }
 
@@ -186,7 +186,7 @@ export async function callAIChat(
       "X-Title": "AxiomAI",
     },
     body: JSON.stringify({
-      model: "deepseek/deepseek-chat-v3-0324:free",
+      model: "openrouter/auto",
       messages: [{ role: "system", content: systemPrompt }, ...messages],
       temperature: 0.3,
       max_tokens: 2000,
@@ -219,12 +219,11 @@ export async function callAIQuiz(prompt: string): Promise<string> {
       "X-Title": "AxiomAI",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.0-flash-exp:free",
+      model: "openrouter/auto",
       messages: [
         {
           role: "system",
-          content:
-            "You are a math quiz generator. Always respond with valid JSON only, no markdown, no extra text.",
+          content: "You are a math quiz generator. Always respond with valid JSON only, no markdown, no extra text.",
         },
         { role: "user", content: prompt },
       ],

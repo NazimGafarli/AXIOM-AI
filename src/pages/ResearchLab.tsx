@@ -1,22 +1,27 @@
 import { useState, useRef } from 'react';
 import { motion } from 'motion/react';
-import { Microscope, FileText, Fingerprint, FlaskConical as Flask, Send, Loader2, Sparkles, Binary, Beaker } from 'lucide-react';
-import { isQuotaError } from '../lib/gemini';
+import {
+  Microscope, FileText, Fingerprint, FlaskConical as Flask,
+  Send, Loader2, Sparkles, Binary, Beaker,
+} from 'lucide-react';
+import { isQuotaError } from '../lib/ai';
 import { toast } from 'sonner';
 
-// ─── DeepSeek caller (no SDK needed — plain fetch) ────────────────────────────
-async function callDeepSeek(systemPrompt: string, userPrompt: string): Promise<string> {
-  const key = import.meta.env.VITE_DEEPSEEK_API_KEY;
-  if (!key) throw new Error("VITE_DEEPSEEK_API_KEY is not configured.");
+// ─── OpenRouter caller for Research Lab ───────────────────────────────────────
+async function callResearchAI(systemPrompt: string, userPrompt: string): Promise<string> {
+  const key = import.meta.env.VITE_OPENROUTER_API_KEY;
+  if (!key) throw new Error("VITE_OPENROUTER_API_KEY is not configured.");
 
-  const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${key}`,
+      "HTTP-Referer": "https://www.axiomai.website",
+      "X-Title": "AxiomAI",
     },
     body: JSON.stringify({
-      model: "deepseek-reasoner",
+      model: "deepseek/deepseek-r1-0528:free",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -28,12 +33,12 @@ async function callDeepSeek(systemPrompt: string, userPrompt: string): Promise<s
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(`DeepSeek API error ${res.status}: ${err?.error?.message || res.statusText}`);
+    throw new Error(`OpenRouter error ${res.status}: ${err?.error?.message || res.statusText}`);
   }
 
   const data = await res.json();
   const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error("DeepSeek returned an empty response.");
+  if (!text) throw new Error("OpenRouter returned an empty response.");
   return text.trim();
 }
 
@@ -44,7 +49,7 @@ export default function ResearchLab() {
   const [input, setInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ─── Paper Analyzer ─────────────────────────────────────────────────────────
+  // ─── Paper Analyzer ──────────────────────────────────────────────────────────
   const analyzePaper = async (file: File) => {
     setLoading(true);
     setResult(null);
@@ -68,25 +73,24 @@ Respond in clear Markdown with LaTeX for all formulas.
 Document content:
 ${fileText.slice(0, 8000)}`;
 
-      const text = await callDeepSeek(
+      const text = await callResearchAI(
         'You are an expert mathematical research analyst. Provide precise, structured analysis.',
         userPrompt
       );
-
       setResult(text);
     } catch (err: any) {
-      console.error("Research Lab Error:", err);
+      console.error('[ResearchLab] Paper analysis error:', err);
       toast.error(
         isQuotaError(err)
-          ? "The research engine is at capacity. Please try again later."
-          : err.message || "Analysis failed. Ensure the file is a valid text-based document."
+          ? 'The research engine is at capacity. Please try again later.'
+          : err.message || 'Analysis failed. Ensure the file is a valid text-based document.'
       );
     } finally {
       setLoading(false);
     }
   };
 
-  // ─── Structural Fingerprint ─────────────────────────────────────────────────
+  // ─── Structural Fingerprint ──────────────────────────────────────────────────
   const getFingerprint = async () => {
     if (!input.trim()) return;
     setLoading(true);
@@ -103,18 +107,17 @@ Identify its "Structural Fingerprint":
 
 Respond in a structured research summary format. Use LaTeX for all formulas.`;
 
-      const text = await callDeepSeek(
+      const text = await callResearchAI(
         'You are an expert mathematician specializing in structural analysis and mathematical theory.',
         userPrompt
       );
-
       setResult(text);
     } catch (err: any) {
-      console.error("Fingerprint Error:", err);
+      console.error('[ResearchLab] Fingerprint error:', err);
       toast.error(
         isQuotaError(err)
-          ? "Fingerprint engine busy. Try again later."
-          : err.message || "Fingerprinting failed."
+          ? 'Fingerprint engine busy. Try again later.'
+          : err.message || 'Fingerprinting failed.'
       );
     } finally {
       setLoading(false);
@@ -208,7 +211,9 @@ Respond in a structured research summary format. Use LaTeX for all formulas.`;
                   disabled={loading || !input.trim()}
                   className="w-full py-4 rounded-xl bg-accent-primary text-white font-bold text-sm shadow-glow hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? <Loader2 size={20} className="animate-spin" /> : <Fingerprint size={20} />}
+                  {loading
+                    ? <Loader2 size={20} className="animate-spin" />
+                    : <Fingerprint size={20} />}
                   <span>Generate Structural Fingerprint</span>
                 </button>
               </div>
@@ -235,7 +240,7 @@ Respond in a structured research summary format. Use LaTeX for all formulas.`;
                 <div className="flex items-center gap-2">
                   <Sparkles size={16} className="text-accent-primary" />
                   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">
-                    Analytical Output · DeepSeek R1
+                    Analytical Output · DeepSeek R1 via OpenRouter
                   </span>
                 </div>
                 {result && (
@@ -254,8 +259,12 @@ Respond in a structured research summary format. Use LaTeX for all formulas.`;
                     <Loader2 size={48} className="animate-spin text-accent-primary" />
                     <Binary size={20} className="absolute inset-0 m-auto text-white" />
                   </div>
-                  <p className="text-lg font-bold tracking-tight">Processing through DeepSeek R1 Reasoning Engine...</p>
-                  <p className="text-xs text-text-muted animate-pulse">Running chain-of-thought analysis · may take 15–30 seconds</p>
+                  <p className="text-lg font-bold tracking-tight">
+                    Processing through DeepSeek R1 Reasoning Engine...
+                  </p>
+                  <p className="text-xs text-text-muted animate-pulse">
+                    Running chain-of-thought analysis · may take 15–30 seconds
+                  </p>
                 </div>
               ) : result ? (
                 <motion.div

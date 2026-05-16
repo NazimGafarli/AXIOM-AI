@@ -20,7 +20,7 @@ export const AI_MODELS: AIModel[] = [
     minPlan: "free",
     color: "text-cyan-400",
     desc: "Chain-of-thought · Best for algebra & calculus",
-    apiModel: "deepseek/deepseek-r1:free",
+    apiModel: "deepseek/deepseek-r1-0528:free",
   },
   {
     id: "gemini-flash",
@@ -53,7 +53,7 @@ export const AI_MODELS: AIModel[] = [
     id: "claude-sonnet",
     name: "Claude Sonnet 4.5",
     badge: "ELITE",
-    minPlan: "research",
+    minPlan: "elite",
     color: "text-pink-400",
     desc: "Best for proofs, research & LaTeX explanations",
     apiModel: "anthropic/claude-sonnet-4-5",
@@ -64,7 +64,6 @@ export const PLAN_RANK: Record<string, number> = {
   free: 0,
   plus: 1,
   pro: 2,
-  research: 3,
   elite: 3,
 };
 
@@ -77,7 +76,7 @@ export function isModelLocked(model: AIModel, plan: string): boolean {
   return PLAN_RANK[model.minPlan] > (PLAN_RANK[plan] ?? 0);
 }
 
-// ─── Math System Prompt ──────────────────────────────────────────────────────
+// ─── Math System Prompt ───────────────────────────────────────────────────────
 
 export const MATH_SYSTEM_PROMPT = `You are AxiomAI, the world's most advanced mathematics tutor and problem-solving engine.
 
@@ -160,17 +159,16 @@ export async function callAI(modelId: string, userPrompt: string): Promise<strin
   const model = AI_MODELS.find((m) => m.id === modelId);
   if (!model) throw new Error(`Unknown model id: "${modelId}"`);
 
-  // Try primary model, fall back to DeepSeek R1 free if it fails
   try {
     return await callOpenRouter(model.apiModel, MATH_SYSTEM_PROMPT, userPrompt, 4000);
   } catch (e) {
-    if (model.id === "deepseek-r1") throw e; // already the fallback
+    if (model.id === "deepseek-r1") throw e;
     console.warn(`[AxiomAI] ${model.name} failed, falling back to DeepSeek R1:`, e);
-    return await callOpenRouter("deepseek/deepseek-r1:free", MATH_SYSTEM_PROMPT, userPrompt, 4000);
+    return await callOpenRouter("deepseek/deepseek-r1-0528:free", MATH_SYSTEM_PROMPT, userPrompt, 4000);
   }
 }
 
-// ─── Chat caller (ProfessorChat) ──────────────────────────────────────────────
+// ─── Chat caller (ProfessorChat) ─────────────────────────────────────────────
 
 export async function callAIChat(
   systemPrompt: string,
@@ -188,7 +186,7 @@ export async function callAIChat(
       "X-Title": "AxiomAI",
     },
     body: JSON.stringify({
-      model: "deepseek/deepseek-r1:free",
+      model: "deepseek/deepseek-r1-0528:free",
       messages: [{ role: "system", content: systemPrompt }, ...messages],
       temperature: 0.3,
       max_tokens: 2000,

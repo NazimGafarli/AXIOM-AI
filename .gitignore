@@ -6,3 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Electron builds - large DMG files
+dist-electron/
+public/downloads/*.dmg
+*.dmg
+*.blockmap
+*.yml
+!builder-effective-config.yaml

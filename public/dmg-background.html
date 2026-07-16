@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; }
+  body {
+    width: 660px;
+    height: 400px;
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 40%, #2d1b69 100%);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .orb-1 { position: absolute; width: 200px; height: 200px; background: rgba(99,102,241,0.3); border-radius: 50%; filter: blur(60px); top: -50px; right: -50px; }
+  .orb-2 { position: absolute; width: 150px; height: 150px; background: rgba(168,85,247,0.2); border-radius: 50%; filter: blur(60px); bottom: -30px; left: -30px; }
+  .header { position: absolute; top: 30px; text-align: center; z-index: 2; }
+  .header h1 { color: white; font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
+  .header p { color: rgba(255,255,255,0.5); font-size: 13px; margin-top: 4px; }
+  .drag-area { display: flex; align-items: center; gap: 45px; background: rgba(255,255,255,0.05); padding: 20px 40px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); z-index: 2; margin-top: 20px; }
+  .app-icon { width: 70px; height: 70px; border-radius: 14px; background: linear-gradient(135deg, #6366f1, #a855f7); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(99,102,241,0.3); }
+  .app-icon span { color: white; font-size: 32px; font-weight: bold; }
+  .arrow { color: rgba(255,255,255,0.3); font-size: 28px; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { transform: translateX(0); opacity: 0.3; } 50% { transform: translateX(8px); opacity: 0.8; } }
+  .folder-icon { width: 70px; height: 70px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; }
+  .folder-icon span { color: rgba(255,255,255,0.3); font-size: 32px; }
+  .label-bottom { position: absolute; bottom: 25px; color: rgba(255,255,255,0.15); font-size: 11px; letter-spacing: 2px; z-index: 2; }
+</style>
+</head>
+<body>
+  <div class="orb-1"></div>
+  <div class="orb-2"></div>
+  <div class="header">
+    <h1>✦ Install Axiom AI</h1>
+    <p>Drag the app to your Applications folder</p>
+  </div>
+  <div class="drag-area">
+    <div class="app-icon"><span>🧠</span></div>
+    <div class="arrow">→</div>
+    <div class="folder-icon"><span>📁</span></div>
+  </div>
+  <div class="label-bottom">Axiom AI • Version 1.0.0</div>
+</body>
+</html>

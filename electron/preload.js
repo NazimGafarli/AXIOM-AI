@@ -1,10 +1,10 @@
-const { contextBridge } = require('electron');
+const { contextBridge, app } = require('electron');
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('api', {
   platform: process.platform,
-  isElectron: true
+  isElectron: true,
+  appVersion: app.getVersion(),
+  appName: app.getName()
 });
 
 // Detect if running in Electron

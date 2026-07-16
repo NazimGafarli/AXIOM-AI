@@ -1,8 +1,9 @@
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let mainWindow;
-const isDev = process.env.NODE_ENV === 'development';
+let isDev = process.env.NODE_ENV === 'development';
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -24,6 +25,22 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
+    // Check if this is first launch
+    const isFirstLaunch = !fs.existsSync(path.join(app.getPath('userData'), 'launched-before'));
+    
+    if (isFirstLaunch) {
+      // Show welcome message on first launch
+      mainWindow.webContents.once('did-finish-load', () => {
+        mainWindow.webContents.executeJavaScript(`
+          setTimeout(() => {
+            alert('🎉 Welcome to Axiom AI!\\n\\nYour AI-powered math and academic problem solver.\\n\\nLet\'s get started!');
+          }, 500);
+        `);
+        // Mark as launched
+        fs.writeFileSync(path.join(app.getPath('userData'), 'launched-before'), 'yes');
+      });
+    }
+    
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
@@ -31,13 +48,13 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // Handle external links (open in default browser)
+  // Handle external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
 
-  // Create application menu
+  // Create menu
   const template = [
     {
       label: 'Axiom AI',
@@ -86,6 +103,25 @@ function createWindow() {
         { role: 'zoom' },
         { type: 'separator' },
         { role: 'close' }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Learn More',
+          click: () => shell.openExternal('https://axiomai.com')
+        },
+        {
+          label: 'Keyboard Shortcuts',
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'Keyboard Shortcuts',
+              message: '⌘ + , = Preferences\n⌘ + Q = Quit\n⌘ + W = Close Window'
+            });
+          }
+        }
       ]
     }
   ];

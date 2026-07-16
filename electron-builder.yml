@@ -1,0 +1,29 @@
+appId: com.axiomai.app
+productName: Axiom AI
+directories:
+  output: dist-electron
+files:
+  - dist/**/*
+  - electron/**/*
+  - public/Logo.png
+mac:
+  icon: public/Logo.png
+  target: dmg
+  artifactName: Axiom-AI-${version}-mac-${arch}.${ext}
+dmg:
+  title: Axiom AI Installer
+  background: public/dmg-background.png
+  icon: public/Logo.png
+  iconSize: 128
+  contents:
+    - x: 280
+      y: 240
+      type: file
+    - x: 380
+      y: 240
+      type: link
+      path: /Applications
+  window:
+    width: 660
+    height: 400
+    position: center

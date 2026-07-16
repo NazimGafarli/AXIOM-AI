@@ -10,7 +10,8 @@ import {
   faChevronDown, 
   faMicrochip, 
   faDesktop,
-  faCloudArrowDown 
+  faCloudArrowDown,
+  faMinimize
 } from '@fortawesome/free-solid-svg-icons';
 
 interface DownloadBarProps {
@@ -26,6 +27,7 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
   const [isMacSilicon, setIsMacSilicon] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
+  const [isMinimized, setIsMinimized] = useState(false);
 
   useEffect(() => {
     const userAgent = navigator.userAgent.toLowerCase();
@@ -38,6 +40,13 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
       setPlatform('windows');
     }
 
+    // Check if user minimized it before
+    const savedMinimized = localStorage.getItem('axiom_downloadbar_minimized');
+    if (savedMinimized === 'true') {
+      setIsMinimized(true);
+    }
+
+    // Check if user closed it before
     const hasInstalled = localStorage.getItem('axiom_installed');
     if (hasInstalled === 'true') {
       setIsVisible(false);
@@ -62,7 +71,6 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
     const url = getDownloadUrl(type);
     window.open(url, '_blank');
     
-    // Safe analytics tracking with TypeScript fix
     try {
       const win = window as any;
       if (typeof win !== 'undefined' && win.gtag) {
@@ -72,18 +80,68 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
         });
       }
     } catch (error) {
-      // Silently fail if analytics is not available
       console.log('Analytics not available');
     }
   };
 
-  const handleClose = () => {
+  // MINIMIZE - collapses bar to small icon
+  const handleMinimize = () => {
+    setIsMinimized(true);
+    localStorage.setItem('axiom_downloadbar_minimized', 'true');
+  };
+
+  // EXPAND - expands bar from small icon
+  const handleExpand = () => {
+    setIsMinimized(false);
+    localStorage.setItem('axiom_downloadbar_minimized', 'false');
+  };
+
+  // PERMANENT CLOSE - user doesn't want to see it anymore
+  const handlePermanentClose = () => {
     setIsVisible(false);
     localStorage.setItem('axiom_installed', 'true');
   };
 
   if (!isVisible) return null;
 
+  // =============================================
+  // MINIMIZED STATE - Small icon in bottom-right
+  // =============================================
+  if (isMinimized) {
+    return (
+      <div 
+        className="fixed bottom-4 right-4 z-50 cursor-pointer group"
+        onClick={handleExpand}
+      >
+        <div className="relative">
+          {/* Glow effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full blur-lg opacity-75 group-hover:opacity-100 transition-opacity duration-300"></div>
+          
+          {/* Icon button */}
+          <div className="relative bg-gradient-to-r from-[#1a1a2e] to-[#2d1b69] rounded-full p-3 shadow-2xl border border-blue-500/30 group-hover:scale-110 transition-transform duration-300">
+            <img 
+              src="/Logo.png" 
+              alt="Download Axiom AI" 
+              className="w-8 h-8 rounded-full"
+            />
+            {/* Small red dot with download arrow */}
+            <span className="absolute -top-1 -right-1 bg-red-500 w-5 h-5 rounded-full text-[10px] text-white flex items-center justify-center font-bold animate-pulse shadow-lg shadow-red-500/50">
+              ⬇
+            </span>
+          </div>
+          
+          {/* Tooltip on hover */}
+          <div className="absolute bottom-full mb-2 right-0 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-lg border border-gray-700">
+            Click to download {appName}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================
+  // FULL EXPANDED STATE - Mac version
+  // =============================================
   if (platform === 'mac') {
     return (
       <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-[#0f0f1a] to-[#1a1a2e] border-t border-blue-900/30 shadow-2xl z-50 animate-slide-up backdrop-blur-xl bg-opacity-95">
@@ -127,7 +185,7 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
             </div>
 
             {/* Right side - Download Buttons */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <div className="relative">
                 <button
                   onClick={() => setShowDropdown(!showDropdown)}
@@ -138,7 +196,6 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
                   <FontAwesomeIcon icon={faChevronDown} className={`w-4 h-4 transition-transform duration-200 ${showDropdown ? 'rotate-180' : ''}`} />
                 </button>
 
-                {/* Dropdown for Mac versions */}
                 {showDropdown && (
                   <div className="absolute bottom-full mb-2 left-0 w-72 bg-[#1a1a2e] rounded-xl shadow-2xl border border-white/10 overflow-hidden animate-fade-in backdrop-blur-xl">
                     <div className="p-2">
@@ -192,12 +249,14 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
                 )}
               </div>
 
+              {/* MINIMIZE BUTTON - collapses to small icon */}
               <button
-                onClick={handleClose}
+                onClick={handleMinimize}
                 className="text-gray-500 hover:text-gray-300 transition-colors p-2 hover:bg-white/5 rounded-lg"
-                aria-label="Close"
+                aria-label="Minimize download bar"
+                title="Minimize to bottom corner"
               >
-                <FontAwesomeIcon icon={faXmark} className="w-5 h-5" />
+                <FontAwesomeIcon icon={faMinimize} className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -206,6 +265,9 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
     );
   }
 
+  // =============================================
+  // FULL EXPANDED STATE - Windows version
+  // =============================================
   if (platform === 'windows') {
     return (
       <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-[#0f0f1a] to-[#1a1a2e] border-t border-blue-900/30 shadow-2xl z-50 animate-slide-up backdrop-blur-xl bg-opacity-95">
@@ -246,7 +308,7 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
               <span>Download and run the installer</span>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => handleDownload('windows')}
                 className="flex items-center gap-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-2.5 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-blue-600/40 border border-blue-500/30"
@@ -257,11 +319,12 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
               </button>
 
               <button
-                onClick={handleClose}
+                onClick={handleMinimize}
                 className="text-gray-500 hover:text-gray-300 transition-colors p-2 hover:bg-white/5 rounded-lg"
-                aria-label="Close"
+                aria-label="Minimize download bar"
+                title="Minimize to bottom corner"
               >
-                <FontAwesomeIcon icon={faXmark} className="w-5 h-5" />
+                <FontAwesomeIcon icon={faMinimize} className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -270,7 +333,9 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
     );
   }
 
-  // Unknown platform - show both options
+  // =============================================
+  // UNKNOWN PLATFORM - Show both options
+  // =============================================
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-[#0f0f1a] to-[#1a1a2e] border-t border-blue-900/30 shadow-2xl z-50 animate-slide-up backdrop-blur-xl bg-opacity-95">
       <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
@@ -295,10 +360,11 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <a
               href={getDownloadUrl('mac-silicon')}
               className="flex items-center gap-2.5 bg-white/10 hover:bg-white/20 text-white font-medium py-2.5 px-5 rounded-xl transition-all duration-200 border border-white/10 hover:border-white/20 backdrop-blur-sm"
+              download
             >
               <FontAwesomeIcon icon={faApple} className="w-5 h-5" />
               <span>macOS</span>
@@ -306,15 +372,18 @@ const DownloadBar: React.FC<DownloadBarProps> = ({
             <a
               href={getDownloadUrl('windows')}
               className="flex items-center gap-2.5 bg-white/10 hover:bg-white/20 text-white font-medium py-2.5 px-5 rounded-xl transition-all duration-200 border border-white/10 hover:border-white/20 backdrop-blur-sm"
+              download
             >
               <FontAwesomeIcon icon={faWindows} className="w-5 h-5" />
               <span>Windows</span>
             </a>
             <button
-              onClick={handleClose}
+              onClick={handleMinimize}
               className="text-gray-500 hover:text-gray-300 transition-colors p-2 hover:bg-white/5 rounded-lg"
+              aria-label="Minimize download bar"
+              title="Minimize to bottom corner"
             >
-              <FontAwesomeIcon icon={faXmark} className="w-5 h-5" />
+              <FontAwesomeIcon icon={faMinimize} className="w-5 h-5" />
             </button>
           </div>
         </div>

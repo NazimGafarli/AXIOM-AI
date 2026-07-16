@@ -4,8 +4,8 @@
   "description": "AI-powered math and academic problem solver",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#0f0f1a",
+  "theme_color": "#6366f1",
   "orientation": "portrait",
   "icons": [
     {

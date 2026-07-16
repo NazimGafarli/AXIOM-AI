@@ -12,6 +12,7 @@ import ResetPassword from './pages/ResetPassword';
 import Guide from './pages/Guide';
 import Settings from './pages/Settings';
 import Study from './pages/Study';
+import DownloadBar from './components/DownloadBar'; // <-- ADD THIS IMPORT
 import { Toaster } from 'sonner';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -87,6 +88,10 @@ function App() {
             } />
           </Routes>
           <Toaster position="bottom-right" theme="dark" />
+          
+          {/* ====== DOWNLOAD BAR - ADDED HERE ====== */}
+          <DownloadBar appName="Axiom AI" appVersion="1.0.0" />
+          
         </div>
       </Router>
     </AuthProvider>
